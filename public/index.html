@@ -472,6 +472,7 @@
         let currentPricing = null;
         let exchangeRate = null;
         let selectedCurrency = 'USD';
+        let isLiveRate = false;
 
         // Fetch exchange rate on page load
         async function fetchExchangeRate() {
@@ -479,17 +480,22 @@
                 const response = await fetch('https://card-price-checker.onrender.com/api/exchange-rate');
                 const data = await response.json();
                 
-                if (data.success) {
+                if (data.success && !data.error) {
+                    // Live rate from API
                     exchangeRate = data.rate;
+                    isLiveRate = true;
                     exchangeRateInfo.textContent = `Exchange rate: 1 USD = ${data.rate.toFixed(4)} CAD`;
                 } else {
-                    exchangeRate = 1.4; // Fallback
-                    exchangeRateInfo.textContent = `Exchange rate: 1 USD ≈ ${exchangeRate} CAD (estimated)`;
+                    // Fallback rate
+                    exchangeRate = data.rate || 1.4;
+                    isLiveRate = false;
+                    exchangeRateInfo.textContent = `Exchange rate: 1 USD ≈ ${exchangeRate.toFixed(1)} CAD (estimated)`;
                 }
             } catch (err) {
                 console.error('Failed to fetch exchange rate:', err);
-                exchangeRate = 1.4; // Fallback
-                exchangeRateInfo.textContent = `Exchange rate: 1 USD ≈ ${exchangeRate} CAD (estimated)`;
+                exchangeRate = 1.4;
+                isLiveRate = false;
+                exchangeRateInfo.textContent = `Exchange rate: 1 USD ≈ ${exchangeRate.toFixed(1)} CAD (estimated)`;
             }
         }
 
