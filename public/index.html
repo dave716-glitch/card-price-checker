@@ -291,6 +291,11 @@
         .scan-another {
             margin-top: 20px;
         }
+
+        .btn-inventory {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
@@ -395,6 +400,7 @@
                     </div>
                 </div>
 
+                <button class="btn btn-inventory" id="addToInventory">Add to Inventory</button>
                 <button class="btn scan-another" id="scanAnother">Scan Another Card</button>
             </div>
         </div>
@@ -413,9 +419,13 @@
         const errorMessage = document.getElementById('errorMessage');
         const results = document.getElementById('results');
         const scanAnother = document.getElementById('scanAnother');
+        const addToInventory = document.getElementById('addToInventory');
+
+        const SHEET_URL = 'https://script.google.com/macros/s/AKfycbx4dRXRjphNuLHNTnssBALxoA24QphXlLhKF4AczdLFnz0Wk1PtvbESK3q2_jQBk4geSg/exec';
 
         let selectedFile = null;
         let identifiedCardInfo = null;
+        let currentPricing = null;
 
         // Upload area click
         uploadArea.addEventListener('click', () => {
@@ -567,6 +577,9 @@
                     return;
                 }
 
+                // Store pricing for inventory button
+                currentPricing = data.pricing;
+
                 // Display results
                 displayResults(cardInfo, data.pricing);
 
@@ -598,6 +611,49 @@
             results.classList.add('active');
         }
 
+        // Add to inventory button
+        addToInventory.addEventListener('click', async () => {
+            addToInventory.disabled = true;
+            addToInventory.textContent = 'Adding...';
+            
+            try {
+                // Get the current card info
+                const cardData = {
+                    player: document.getElementById('editPlayer').value,
+                    year: document.getElementById('editYear').value,
+                    brand: document.getElementById('editBrand').value,
+                    series: document.getElementById('editSeries').value,
+                    sport: document.getElementById('editSport').value,
+                    parallel: document.getElementById('editParallel').value,
+                    price: currentPricing ? currentPricing.price : null
+                };
+                
+                const response = await fetch(SHEET_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(cardData)
+                });
+                
+                // With no-cors, we can't read the response, so we assume success
+                addToInventory.textContent = '✓ Added to Inventory!';
+                addToInventory.style.background = '#28a745';
+                
+                setTimeout(() => {
+                    addToInventory.textContent = 'Add to Inventory';
+                    addToInventory.style.background = 'linear-gradient(135deg, #28a745 0%, #20c997 100%)';
+                    addToInventory.disabled = false;
+                }, 3000);
+                
+            } catch (err) {
+                addToInventory.textContent = 'Failed - Try Again';
+                addToInventory.disabled = false;
+                showError('Failed to add to inventory: ' + err.message);
+            }
+        });
+
         // Show error
         function showError(message) {
             errorMessage.textContent = message;
@@ -608,12 +664,15 @@
         scanAnother.addEventListener('click', () => {
             selectedFile = null;
             identifiedCardInfo = null;
+            currentPricing = null;
             fileInput.value = '';
             previewContainer.classList.remove('active');
             cardEdit.classList.remove('active');
             results.classList.remove('active');
             error.classList.remove('active');
             uploadArea.style.display = 'block';
+            addToInventory.textContent = 'Add to Inventory';
+            addToInventory.style.background = 'linear-gradient(135deg, #28a745 0%, #20c997 100%)';
         });
     </script>
 </body>
