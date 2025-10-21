@@ -109,6 +109,28 @@ app.post('/api/get-price', async (req, res) => {
   }
 });
 
+// Exchange rate endpoint
+app.get('/api/exchange-rate', async (req, res) => {
+  try {
+    // Using exchangerate-api.com (free tier, no API key needed)
+    const response = await axios.get('https://api.exchangerate-api.com/v4/latest/USD');
+    const cadRate = response.data.rates.CAD;
+    
+    res.json({
+      success: true,
+      rate: cadRate,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Exchange rate fetch error:', error);
+    res.json({
+      success: false,
+      rate: 1.4, // Fallback rate if API fails
+      error: error.message
+    });
+  }
+});
+
 // Search SportsCardsPro for pricing
 async function searchSportsCardsPro(cardInfo) {
   try {
