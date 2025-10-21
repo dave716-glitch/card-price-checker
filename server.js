@@ -1,29 +1,34 @@
-const express = require('express');
-const cors = require('cors');
-const multer = require('multer');
-const Anthropic = require('@anthropic-ai/sdk');
-const axios = require('axios');
 require('dotenv').config();
+const express = require('express');
+const multer = require('multer');
+const axios = require('axios');
+const Anthropic = require('@anthropic-ai/sdk');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
-const upload = multer({ storage: multer.memoryStorage() });
-
-app.use(cors());
-app.use(express.json());
-app.use(express.static('public'));
+const upload = multer({ dest: 'uploads/' });
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-// Identify card from image using Claude
+const SPORTSCARDSPRO_TOKEN = process.env.SPORTSCARDSPRO_TOKEN;
+
+app.use(express.static('public'));
+app.use(express.json());
+
+// Card recognition endpoint - ONLY identifies the card
 app.post('/api/identify-card', upload.single('image'), async (req, res) => {
   try {
-    const imageBuffer = req.file.buffer;
-    const base64Image = imageBuffer.toString('base64');
-    
-const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5-20250929',
+    const imagePath = req.file.path;
+    const imageData = fs.readFileSync(imagePath);
+    const base64Image = imageData.toString('base64');
+
+    console.log('Analyzing card image...');
+
+    const message = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
       max_tokens: 1024,
       messages: [
         {
@@ -41,120 +46,247 @@ const message = await anthropic.messages.create({
               type: 'text',
               text: `Analyze this sports card image and extract the following information in JSON format:
 {
-  "player": "player name(s)",
-  "year": "year or year range (e.g., 2024-25)",
-  "brand": "card manufacturer",
-  "series": "series/set name",
-  "cardNumber": "card number",
-  "sport": "sport type",
-  "autographed": true or false,
-  "serialNumber": "serial number if present (e.g., /50, 14/99)",
-  "parallel": "parallel type if present (e.g., Gold, Refractor, Orange)"
+  "player": "player name",
+  "year": "year (e.g., 2024-25)",
+  "brand": "card brand (e.g., Upper Deck, Panini)",
+  "series": "series name (e.g., Series 1, Prizm)",
+  "sport": "sport (hockey, basketball, football, baseball)",
+  "parallel": "parallel/variant name if any (e.g., Young Guns, Prizm, Base)"
 }
 
-IMPORTANT:
-- Look for autographs (signatures on the card) and text like "CERTIFIED AUTOGRAPH"
-- Look for serial numbers (usually format like 14/50, meaning card 14 of 50 made)
-- Look for parallel/variant types (Gold, Refractor, Orange, etc.) - often indicated by border color or text
-- Be precise with the year format, brand name, and series
-- If it's a checklist card with multiple players, include both names separated by " & "
-- Look carefully for card numbers - they are often small and at the bottom of the card
-- If you truly cannot find something, return "Not visible" for cardNumber or null for optional fields
-Only return the JSON, nothing else.`
+Be precise with the information. If something is unclear, use your best judgment. For hockey rookies in Upper Deck, "Young Guns" is the standard rookie card designation.`
             }
           ],
         },
       ],
     });
-    
-// Extract JSON from response (handle markdown code blocks)
-let responseText = message.content[0].text;
-// Remove markdown code blocks if present
-responseText = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-const cardInfo = JSON.parse(responseText);    res.json({ success: true, cardInfo });
-  } catch (error) {
-    console.error('Error identifying card:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
 
-// Search eBay for sold listings
-app.post('/api/search-ebay', async (req, res) => {
-  try {
-    const { cardInfo } = req.body;
-    
-    // Build search query
-const searchQuery = `${cardInfo.year} ${cardInfo.brand} ${cardInfo.series} ${cardInfo.player}`;
-console.log('\n========== EBAY SEARCH ==========');
-console.log('Search Query:', searchQuery);
-console.log('Card Info:', cardInfo);
-console.log('==================================\n');
-    // eBay Finding API endpoint
-const ebayUrl = 'https://svcs.ebay.com/services/search/FindingService/v1';
-    const params = {
-      'OPERATION-NAME': 'findCompletedItems',
-      'SERVICE-VERSION': '1.0.0',
-      'SECURITY-APPNAME': process.env.EBAY_APP_ID,
-      'RESPONSE-DATA-FORMAT': 'JSON',
-      'REST-PAYLOAD': '',
-      'keywords': searchQuery,
-      'sortOrder': 'EndTimeSoonest',
-      'paginationInput.entriesPerPage': '100',
-      'itemFilter(0).name': 'SoldItemsOnly',
-      'itemFilter(0).value': 'true',
-      'itemFilter(1).name': 'Condition',
-      'itemFilter(1).value': '3000', // Used condition
-    };
+    fs.unlinkSync(imagePath);
 
-    const response = await axios.get(ebayUrl, { params });
+    const responseText = message.content[0].text;
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     
-    const items = response.data.findCompletedItemsResponse[0].searchResult[0].item || [];
-    console.log('Total items found by eBay:', items.length);
-if (items.length > 0) {
-  console.log('First 3 item titles:', items.slice(0, 3).map(i => i.title[0]));
-}
-   console.log('eBay Response Status:', response.data.findCompletedItemsResponse[0].ack[0]);
-console.log('Total items found:', items.length);
-if (items.length > 0) {
-  console.log('First item title:', items[0].title[0]);
-} 
-    // Filter out graded cards
-    const gradingTerms = ['psa', 'bgs', 'sgc', 'cgc', 'graded', 'gem', 'mint 10', 'bccg', 'hga', 'slab'];
-    
-    const rawCards = items.filter(item => {
-      const title = item.title[0].toLowerCase();
-      return !gradingTerms.some(term => title.includes(term));
-    });
-    
-    console.log('Items after filtering graded cards:', rawCards.length);
-if (rawCards.length > 0) {
-  console.log('First raw card:', rawCards[0].title[0]);
-}
-
-    // Extract just the sold prices (last 10)
-    const soldPrices = rawCards
-      .slice(0, 10)
-      .map(item => ({
-        price: parseFloat(item.sellingStatus[0].currentPrice[0].__value__),
-        date: item.listingInfo[0].endTime[0].split('T')[0],
-        currency: item.sellingStatus[0].currentPrice[0]['@currencyId']
-      }));
-
-    res.json({ 
-      success: true, 
-      soldPrices,
-      totalFound: rawCards.length 
-    });
-} catch (error) {
-    console.error('Error searching eBay:', error.message);
-    if (error.response) {
-console.error('eBay API Response:', JSON.stringify(error.response.data, null, 2));
+    if (!jsonMatch) {
+      throw new Error('Could not extract card information');
     }
-    res.status(500).json({ success: false, error: error.message });
+
+    const cardInfo = JSON.parse(jsonMatch[0]);
+    console.log('Card identified:', cardInfo);
+
+    res.json({
+      success: true,
+      cardInfo: cardInfo
+    });
+
+  } catch (error) {
+    console.error('Error processing card:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
   }
 });
+
+// Separate endpoint to get price based on card info
+app.post('/api/get-price', async (req, res) => {
+  try {
+    const cardInfo = req.body;
+    console.log('Getting price for card:', cardInfo);
+    
+    const pricing = await searchSportsCardsPro(cardInfo);
+    
+    res.json({
+      success: true,
+      pricing: pricing
+    });
+    
+  } catch (error) {
+    console.error('Error getting price:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Search SportsCardsPro for pricing
+async function searchSportsCardsPro(cardInfo) {
+  try {
+    console.log('Searching for price with card info:', cardInfo);
+    
+    // Search query without card number
+    const query = `${cardInfo.player} ${cardInfo.brand} ${cardInfo.year.split('-')[0]}`.trim();
+    console.log('Searching SportsCardsPro with query:', query);
+    
+    // Search for the card
+    const searchUrl = `https://www.sportscardspro.com/api/search?t=${SPORTSCARDSPRO_TOKEN}&q=${encodeURIComponent(query)}`;
+    console.log('Fetching from SportsCardsPro...');
+    
+    const searchResponse = await axios.get(searchUrl);
+    const responseData = searchResponse.data;
+    
+    // Handle different response formats
+    let products = [];
+    if (Array.isArray(responseData)) {
+      products = responseData;
+    } else if (responseData && responseData.products) {
+      products = responseData.products;
+    } else if (responseData && responseData.results) {
+      products = responseData.results;
+    } else {
+      console.log('Unexpected response format');
+      return {
+        found: false,
+        message: 'Unexpected API response format'
+      };
+    }
+    
+    if (!products || products.length === 0) {
+      console.log('No products found');
+      return {
+        found: false,
+        message: 'Card not found in database'
+      };
+    }
+
+    console.log(`Found ${products.length} potential matches`);
+    
+    // Filter variants
+    const filteredProducts = filterVariants(products, cardInfo);
+    
+    if (filteredProducts.length === 0) {
+      console.log('No matches after filtering variants');
+      return {
+        found: false,
+        message: 'No matching cards after filtering'
+      };
+    }
+
+    console.log(`${filteredProducts.length} matches after filtering`);
+    
+    // If looking for Young Guns, prioritize base Upper Deck set cards
+    const queryLower = (cardInfo.parallel || '').toLowerCase();
+    const wantsYoungGuns = queryLower === 'young guns' || queryLower === 'young gun';
+    
+    if (wantsYoungGuns) {
+      filteredProducts.sort((a, b) => {
+        const aIsBase = a.consoleName.toLowerCase().match(/hockey cards \d{4} upper deck$/);
+        const bIsBase = b.consoleName.toLowerCase().match(/hockey cards \d{4} upper deck$/);
+        
+        if (aIsBase && !bIsBase) return -1;
+        if (!aIsBase && bIsBase) return 1;
+        return 0;
+      });
+    }
+    
+    // Log all filtered products
+    console.log('All filtered products (after sorting):');
+    filteredProducts.slice(0, 10).forEach((p, i) => {
+      console.log(`  ${i + 1}. ${p.productName} - ${p.consoleName}`);
+    });
+
+    // Get the best match
+    const bestMatch = filteredProducts[0];
+    console.log('===== MATCHED CARD =====');
+    console.log('Product name:', bestMatch.productName);
+    console.log('Set name:', bestMatch.consoleName);
+    console.log('Card ID:', bestMatch.id);
+    console.log('========================');
+    
+    // Extract raw price from search results
+    const rawPriceString = bestMatch.price1;
+    const rawPrice = rawPriceString ? parseFloat(rawPriceString.replace('$', '')) : null;
+    
+    console.log('===== PRICING =====');
+    console.log('Raw price:', rawPrice);
+    console.log('===================');
+    
+    return {
+      found: true,
+      cardName: bestMatch.productName,
+      setName: bestMatch.consoleName,
+      price: rawPrice,
+      salesVolume: 'N/A',
+      cardId: bestMatch.id
+    };
+    
+  } catch (error) {
+    console.error('SportsCardsPro search error:', error.message);
+    return {
+      found: false,
+      message: 'Error searching SportsCardsPro',
+      error: error.message
+    };
+  }
+}
+
+// Filter out unwanted variants
+function filterVariants(products, cardInfo) {
+  const queryLower = (cardInfo.parallel || '').toLowerCase();
+  
+  // Variants to exclude unless specifically requested
+  const conditionalVariants = [
+    "canvas", "exclusive", "acetate", "deluxe", 
+    "outburst", "clear cut", "high gloss", "rainbow",
+    "spectrum", "silver", "gold", "platinum",
+    "refractor", "prizm", "foil",
+    "chrome", "sparkle", "shimmer", "jumbo"
+  ];
+  
+  // Check if user wants a specific variant (but NOT Young Guns, which is base)
+  const wantsYoungGuns = queryLower === 'young guns' || queryLower === 'young gun';
+  const wantsConditionalVariant = conditionalVariants.some(term => queryLower.includes(term));
+  
+  return products.filter(product => {
+    // Skip products without required fields
+    if (!product.productName || !product.consoleName) {
+      return false;
+    }
+    
+    const productName = product.productName.toLowerCase();
+    const consoleName = product.consoleName.toLowerCase();
+    const fullText = productName + ' ' + consoleName;
+    
+    // ALWAYS filter out oversized
+    if (fullText.includes('oversized')) {
+      return false;
+    }
+    
+    // If user wants Young Guns (base rookie), accept cards with NO variant designation
+    if (wantsYoungGuns) {
+      // Check if product name has variant in brackets [...]
+      if (product.productName.includes('[')) {
+        console.log('Filtering out (has variant in brackets):', product.productName);
+        return false;
+      }
+      
+      // Filter out any cards with variant terms in consoleName
+      for (const term of conditionalVariants) {
+        if (fullText.includes(term)) {
+          console.log(`Filtering out variant (${term}):`, product.productName);
+          return false;
+        }
+      }
+      
+      // This is a base card - keep it!
+      return true;
+    }
+    
+    // Filter out other variants unless specifically requested
+    if (!wantsConditionalVariant) {
+      for (const term of conditionalVariants) {
+        if (fullText.includes(term)) {
+          console.log(`Filtering out variant (${term}):`, product.productName);
+          return false;
+        }
+      }
+    }
+    
+    return true;
+  });
+}
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Server running on http://localhost:${PORT}`);
 });

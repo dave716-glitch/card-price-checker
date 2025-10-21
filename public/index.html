@@ -1,226 +1,620 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#4F46E5">
-  <title>Card Price Checker</title>
-  <link rel="manifest" href="/manifest.json">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    .camera-button {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Card Price Scanner</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 15px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: #f8f9ff;
+        }
+
+        .upload-area:hover {
+            border-color: #764ba2;
+            background: #f0f1ff;
+        }
+
+        .upload-area.dragover {
+            border-color: #764ba2;
+            background: #e8e9ff;
+            transform: scale(1.02);
+        }
+
+        .upload-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+            margin-top: 15px;
+            width: 100%;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 30px;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .preview-container {
+            display: none;
+            margin: 20px 0;
+        }
+
+        .preview-container.active {
+            display: block;
+        }
+
+        .preview-image {
+            width: 100%;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .card-edit {
+            display: none;
+            background: #f8f9ff;
+            border-radius: 15px;
+            padding: 25px;
+            margin: 20px 0;
+        }
+
+        .card-edit.active {
+            display: block;
+        }
+
+        .card-edit h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 20px;
+        }
+
+        .edit-instructions {
+            color: #666;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .edit-field {
+            margin-bottom: 15px;
+        }
+
+        .edit-field label {
+            display: block;
+            font-weight: 600;
+            color: #666;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+
+        .edit-field input,
+        .edit-field select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+
+        .edit-field input:focus,
+        .edit-field select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .results {
+            display: none;
+            margin-top: 30px;
+        }
+
+        .results.active {
+            display: block;
+        }
+
+        .card-info {
+            background: #f8f9ff;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .card-info h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .info-label {
+            font-weight: 600;
+            color: #666;
+        }
+
+        .info-value {
+            color: #333;
+            text-align: right;
+        }
+
+        .pricing {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 15px;
+            padding: 25px;
+        }
+
+        .pricing h3 {
+            margin-bottom: 20px;
+            font-size: 20px;
+        }
+
+        .price-item {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 15px 0;
+        }
+
+        .price-value {
+            font-size: 48px;
+            font-weight: 700;
+        }
+
+        .sales-volume {
+            text-align: center;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(255,255,255,0.2);
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .error {
+            display: none;
+            background: #fee;
+            border: 2px solid #fcc;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            color: #c33;
+        }
+
+        .error.active {
+            display: block;
+        }
+
+        .scan-another {
+            margin-top: 20px;
+        }
+    </style>
 </head>
-<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
-  <div id="app" class="container mx-auto p-4 max-w-2xl">
-    <div class="bg-white rounded-2xl shadow-xl p-6 mb-4">
-      <h1 class="text-3xl font-bold text-gray-800 mb-2">💳 Card Price Checker</h1>
-      <p class="text-gray-600 mb-6">Scan or upload a card to see raw sold prices</p>
-      
-      <!-- Image Input -->
-      <div class="mb-6">
-        <input type="file" id="imageInput" accept="image/*" capture="environment" class="hidden">
-        <button onclick="triggerImageInput()" class="w-full camera-button text-white font-semibold py-4 px-6 rounded-xl shadow-lg hover:shadow-xl transition mb-3">
-          📸 Take Photo / Upload Image
-        </button>
-        
-        <div id="imagePreview" class="hidden mt-4">
-          <img id="previewImg" class="w-full rounded-lg shadow-md">
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🃏 Card Price Scanner</h1>
+            <p>Scan any sports card to get instant pricing</p>
         </div>
-      </div>
 
-      <!-- Loading State -->
-      <div id="loadingState" class="hidden text-center py-8">
-        <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-4 border-indigo-600 mb-4"></div>
-        <p class="text-gray-600 font-medium">Analyzing card...</p>
-      </div>
+        <div class="content">
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📸</div>
+                <h3>Take or Upload Card Photo</h3>
+                <p>Tap to take a photo or upload from gallery</p>
+                <input type="file" id="fileInput" accept="image/*" capture="environment">
+            </div>
 
-      <!-- Card Info -->
-      <div id="cardInfo" class="hidden bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl p-5 mb-6 border-2 border-indigo-200">
-        <h2 class="text-xl font-bold text-gray-800 mb-3">📋 Card Identified</h2>
-        <div id="cardDetails" class="space-y-2 text-gray-700"></div>
-        <button onclick="searchEbay()" class="mt-4 w-full bg-green-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-green-700 transition">
-          🔍 Search eBay Sold Prices
-        </button>
-      </div>
+            <div class="preview-container" id="previewContainer">
+                <img id="previewImage" class="preview-image" alt="Card preview">
+                <button class="btn" id="identifyBtn">Identify Card</button>
+            </div>
 
-      <!-- Searching State -->
-      <div id="searchingState" class="hidden text-center py-8">
-        <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-4 border-green-600 mb-4"></div>
-        <p class="text-gray-600 font-medium">Searching eBay sold listings...</p>
-      </div>
+            <div class="card-edit" id="cardEdit">
+                <h3>Review Card Details</h3>
+                <p class="edit-instructions">Review and edit the card details below, then click "Get Price"</p>
+                
+                <div class="edit-field">
+                    <label for="editPlayer">Player Name</label>
+                    <input type="text" id="editPlayer" placeholder="Player name">
+                </div>
 
-      <!-- Results -->
-      <div id="results" class="hidden">
-        <div class="flex justify-between items-center mb-4">
-          <h2 class="text-2xl font-bold text-gray-800">💰 Sold Prices (Raw)</h2>
-          <div class="bg-green-100 px-4 py-2 rounded-lg">
-            <p class="text-xs text-gray-600">Average</p>
-            <p id="avgPrice" class="text-xl font-bold text-green-700"></p>
-          </div>
+                <div class="edit-field">
+                    <label for="editYear">Year</label>
+                    <input type="text" id="editYear" placeholder="e.g., 2024-25">
+                </div>
+
+                <div class="edit-field">
+                    <label for="editBrand">Brand</label>
+                    <input type="text" id="editBrand" placeholder="e.g., Upper Deck, Panini">
+                </div>
+
+                <div class="edit-field">
+                    <label for="editSeries">Series</label>
+                    <input type="text" id="editSeries" placeholder="e.g., Series 1, Prizm">
+                </div>
+
+                <div class="edit-field">
+                    <label for="editSport">Sport</label>
+                    <select id="editSport">
+                        <option value="hockey">Hockey</option>
+                        <option value="basketball">Basketball</option>
+                        <option value="football">Football</option>
+                        <option value="baseball">Baseball</option>
+                    </select>
+                </div>
+
+                <div class="edit-field">
+                    <label for="editParallel">Parallel/Variant</label>
+                    <input type="text" id="editParallel" placeholder="e.g., Young Guns, Prizm, Base">
+                </div>
+
+                <button class="btn" id="searchBtn">Get Price</button>
+            </div>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Analyzing card and fetching price...</p>
+            </div>
+
+            <div class="error" id="error">
+                <strong>Error:</strong> <span id="errorMessage"></span>
+            </div>
+
+            <div class="results" id="results">
+                <div class="card-info">
+                    <h3>Card Details</h3>
+                    <div class="info-row">
+                        <span class="info-label">Player:</span>
+                        <span class="info-value" id="player"></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Year:</span>
+                        <span class="info-value" id="year"></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Set:</span>
+                        <span class="info-value" id="set"></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Sport:</span>
+                        <span class="info-value" id="sport"></span>
+                    </div>
+                </div>
+
+                <div class="pricing">
+                    <h3>💰 Current Market Value (Raw/Ungraded)</h3>
+                    <div class="price-item">
+                        <span class="price-value main" id="rawPrice"></span>
+                    </div>
+                    <div class="sales-volume">
+                        Based on <strong id="salesVolume"></strong> tracked sales
+                    </div>
+                </div>
+
+                <button class="btn scan-another" id="scanAnother">Scan Another Card</button>
+            </div>
         </div>
-        <div id="priceList" class="space-y-2"></div>
-      </div>
-
-      <!-- Error State -->
-      <div id="errorState" class="hidden bg-red-50 border-2 border-red-200 rounded-lg p-4">
-        <p class="text-red-700 font-medium" id="errorMessage"></p>
-      </div>
     </div>
 
-    <p class="text-center text-gray-500 text-sm">Filters out all graded cards automatically</p>
-  </div>
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const previewContainer = document.getElementById('previewContainer');
+        const previewImage = document.getElementById('previewImage');
+        const identifyBtn = document.getElementById('identifyBtn');
+        const cardEdit = document.getElementById('cardEdit');
+        const searchBtn = document.getElementById('searchBtn');
+        const loading = document.getElementById('loading');
+        const error = document.getElementById('error');
+        const errorMessage = document.getElementById('errorMessage');
+        const results = document.getElementById('results');
+        const scanAnother = document.getElementById('scanAnother');
 
-  <script>
-    // IMPORTANT: Replace this with your actual backend URL after deployment
-const API_URL = 'https://card-price-checker.onrender.com';    
-    let currentCardInfo = null;
+        let selectedFile = null;
+        let identifiedCardInfo = null;
 
-    function triggerImageInput() {
-      document.getElementById('imageInput').click();
-    }
-
-    document.getElementById('imageInput').addEventListener('change', async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      // Show preview
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        document.getElementById('previewImg').src = e.target.result;
-        document.getElementById('imagePreview').classList.remove('hidden');
-      };
-      reader.readAsDataURL(file);
-
-      // Hide previous results
-      document.getElementById('cardInfo').classList.add('hidden');
-      document.getElementById('results').classList.add('hidden');
-      document.getElementById('errorState').classList.add('hidden');
-      document.getElementById('loadingState').classList.remove('hidden');
-
-      // Send to backend for identification
-      const formData = new FormData();
-      formData.append('image', file);
-
-      try {
-        const response = await fetch(`${API_URL}/api/identify-card`, {
-          method: 'POST',
-          body: formData
+        // Upload area click
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
         });
 
-        const data = await response.json();
-        
-        if (data.success) {
-          currentCardInfo = data.cardInfo;
-          displayCardInfo(data.cardInfo);
-        } else {
-          showError('Failed to identify card: ' + data.error);
+        // Drag and drop
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+
+        // File input change
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        // Handle file selection
+        function handleFile(file) {
+            if (!file.type.startsWith('image/')) {
+                showError('Please select an image file');
+                return;
+            }
+
+            selectedFile = file;
+            
+            // Show preview
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                previewImage.src = e.target.result;
+                previewContainer.classList.add('active');
+                uploadArea.style.display = 'none';
+                cardEdit.classList.remove('active');
+                error.classList.remove('active');
+                results.classList.remove('active');
+            };
+            reader.readAsDataURL(file);
         }
-      } catch (error) {
-        showError('Error connecting to server: ' + error.message);
-      } finally {
-        document.getElementById('loadingState').classList.add('hidden');
-      }
-    });
 
-function displayCardInfo(info) {
-  let details = `
-    <p><strong>Player:</strong> <input type="text" id="edit-player" value="${info.player}" class="border rounded px-2 py-1 w-full mt-1"></p>
-    <p><strong>Year:</strong> <input type="text" id="edit-year" value="${info.year}" class="border rounded px-2 py-1 w-32 mt-1"></p>
-    <p><strong>Brand:</strong> <input type="text" id="edit-brand" value="${info.brand}" class="border rounded px-2 py-1 w-full mt-1"></p>
-    <p><strong>Series:</strong> <input type="text" id="edit-series" value="${info.series}" class="border rounded px-2 py-1 w-full mt-1"></p>
-    <p><strong>Card #:</strong> <input type="text" id="edit-cardNumber" value="${info.cardNumber}" class="border rounded px-2 py-1 w-32 mt-1"></p>
-    <p><strong>Sport:</strong> <input type="text" id="edit-sport" value="${info.sport}" class="border rounded px-2 py-1 w-32 mt-1"></p>
-  `;
-  
-  // Add autograph info if present
-  if (info.autographed) {
-    details += `<p><strong>✍️ Autographed:</strong> <span class="text-green-600 font-bold">YES</span></p>`;
-  }
-  
-  // Add serial number if present (editable)
-  if (info.serialNumber && info.serialNumber !== 'null') {
-    details += `<p><strong>Serial #:</strong> <input type="text" id="edit-serialNumber" value="${info.serialNumber}" class="border rounded px-2 py-1 w-24 mt-1"></p>`;
-  }
-  
-  // Add parallel if present (editable)
-  if (info.parallel && info.parallel !== 'null') {
-    details += `<p><strong>Parallel:</strong> <input type="text" id="edit-parallel" value="${info.parallel}" class="border rounded px-2 py-1 w-full mt-1 bg-yellow-50" placeholder="e.g., Gold Wave, Gold Shimmer"></p>`;
-  }
-  
-  document.getElementById('cardDetails').innerHTML = details;
-  document.getElementById('cardInfo').classList.remove('hidden');
-}
+        // Identify button - Step 1: Use Claude Vision to read the card
+        identifyBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
 
-async function searchEbay() {
-  if (!currentCardInfo) return;
+            // Show loading
+            loading.classList.add('active');
+            identifyBtn.disabled = true;
+            error.classList.remove('active');
+            cardEdit.classList.remove('active');
 
-  // Get edited values from input fields
-  const editedCardInfo = {
-    player: document.getElementById('edit-player')?.value || currentCardInfo.player,
-    year: document.getElementById('edit-year')?.value || currentCardInfo.year,
-    brand: document.getElementById('edit-brand')?.value || currentCardInfo.brand,
-    series: document.getElementById('edit-series')?.value || currentCardInfo.series,
-    cardNumber: document.getElementById('edit-cardNumber')?.value || currentCardInfo.cardNumber,
-    sport: document.getElementById('edit-sport')?.value || currentCardInfo.sport,
-    autographed: currentCardInfo.autographed,
-    serialNumber: document.getElementById('edit-serialNumber')?.value || currentCardInfo.serialNumber,
-    parallel: document.getElementById('edit-parallel')?.value || currentCardInfo.parallel
-  };
+            try {
+                // Create form data
+                const formData = new FormData();
+                formData.append('image', selectedFile);
 
-  document.getElementById('cardInfo').classList.add('hidden');
-  document.getElementById('results').classList.add('hidden');
-  document.getElementById('errorState').classList.add('hidden');
-  document.getElementById('searchingState').classList.remove('hidden');
+                // Call API to identify card
+                const response = await fetch('http://localhost:3000/api/identify-card', {
+                    method: 'POST',
+                    body: formData
+                });
 
-  try {
-    const response = await fetch(`${API_URL}/api/search-ebay`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cardInfo: editedCardInfo })
-    });
+                if (!response.ok) {
+                    throw new Error('Failed to identify card');
+                }
 
-    const data = await response.json();
+                const data = await response.json();
 
-    if (data.success && data.soldPrices.length > 0) {
-      displayResults(data.soldPrices);
-    } else {
-      showError('No raw/ungraded sold listings found for this card.');
-    }
-  } catch (error) {
-    showError('Error searching eBay: ' + error.message);
-  } finally {
-    document.getElementById('searchingState').classList.add('hidden');
-    document.getElementById('cardInfo').classList.remove('hidden');
-  }
-}
+                // Hide loading
+                loading.classList.remove('active');
+                identifyBtn.disabled = false;
 
-    function displayResults(prices) {
-      const avgPrice = (prices.reduce((sum, p) => sum + p.price, 0) / prices.length).toFixed(2);
-      document.getElementById('avgPrice').textContent = `$${avgPrice}`;
+                // Store the identified info
+                identifiedCardInfo = data.cardInfo;
 
-      const priceHTML = prices.map((p, idx) => `
-        <div class="bg-white border-2 border-gray-200 rounded-lg p-3 flex justify-between items-center hover:shadow-md transition">
-          <span class="text-gray-600 text-sm">${p.date}</span>
-          <span class="text-2xl font-bold text-indigo-600">$${p.price.toFixed(2)}</span>
-        </div>
-      `).join('');
+                // Populate edit fields
+                document.getElementById('editPlayer').value = data.cardInfo.player || '';
+                document.getElementById('editYear').value = data.cardInfo.year || '';
+                document.getElementById('editBrand').value = data.cardInfo.brand || '';
+                document.getElementById('editSeries').value = data.cardInfo.series || '';
+                document.getElementById('editSport').value = data.cardInfo.sport || 'hockey';
+                document.getElementById('editParallel').value = data.cardInfo.parallel || '';
 
-      document.getElementById('priceList').innerHTML = priceHTML;
-      document.getElementById('results').classList.remove('hidden');
-    }
+                // Show edit form
+                cardEdit.classList.add('active');
 
-    function showError(message) {
-      document.getElementById('errorMessage').textContent = message;
-      document.getElementById('errorState').classList.remove('hidden');
-    }
+            } catch (err) {
+                loading.classList.remove('active');
+                identifyBtn.disabled = false;
+                showError('Failed to identify card: ' + err.message);
+            }
+        });
 
-    // Service Worker for PWA
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js');
-    }
-  </script>
+        // Search button - Step 2: Search SportsCardsPro with reviewed/edited info
+        searchBtn.addEventListener('click', async () => {
+            // Show loading
+            loading.classList.add('active');
+            searchBtn.disabled = true;
+            error.classList.remove('active');
+            results.classList.remove('active');
+
+            try {
+                // Get edited values
+                const cardInfo = {
+                    player: document.getElementById('editPlayer').value,
+                    year: document.getElementById('editYear').value,
+                    brand: document.getElementById('editBrand').value,
+                    series: document.getElementById('editSeries').value,
+                    sport: document.getElementById('editSport').value,
+                    parallel: document.getElementById('editParallel').value
+                };
+
+                // Search SportsCardsPro
+                const response = await fetch('http://localhost:3000/api/get-price', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(cardInfo)
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to search for price');
+                }
+
+                const data = await response.json();
+
+                // Hide loading
+                loading.classList.remove('active');
+                searchBtn.disabled = false;
+
+                // Check if card was found
+                if (!data.pricing.found) {
+                    showError(data.pricing.message || 'Card not found in database');
+                    return;
+                }
+
+                // Display results
+                displayResults(cardInfo, data.pricing);
+
+            } catch (err) {
+                loading.classList.remove('active');
+                searchBtn.disabled = false;
+                showError(err.message);
+            }
+        });
+
+        // Display results
+        function displayResults(cardInfo, pricing) {
+            // Card details
+            document.getElementById('player').textContent = cardInfo.player;
+            document.getElementById('year').textContent = cardInfo.year;
+            document.getElementById('set').textContent = `${cardInfo.brand} ${cardInfo.series}`;
+            document.getElementById('sport').textContent = cardInfo.sport;
+
+            // Raw pricing
+            if (pricing.price) {
+                document.getElementById('rawPrice').textContent = `$${pricing.price.toFixed(2)}`;
+            } else {
+                document.getElementById('rawPrice').textContent = 'N/A';
+            }
+
+            document.getElementById('salesVolume').textContent = pricing.salesVolume;
+
+            // Show results
+            results.classList.add('active');
+        }
+
+        // Show error
+        function showError(message) {
+            errorMessage.textContent = message;
+            error.classList.add('active');
+        }
+
+        // Scan another button
+        scanAnother.addEventListener('click', () => {
+            selectedFile = null;
+            identifiedCardInfo = null;
+            fileInput.value = '';
+            previewContainer.classList.remove('active');
+            cardEdit.classList.remove('active');
+            results.classList.remove('active');
+            error.classList.remove('active');
+            uploadArea.style.display = 'block';
+        });
+    </script>
 </body>
 </html>
