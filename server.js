@@ -48,7 +48,7 @@ app.post('/api/identify-card', upload.single('image'), async (req, res) => {
 {
   "player": "player name",
   "year": "year (e.g., 2024-25)",
-  "brand": "card brand (e.g., Upper Deck, Panini)",
+  "brand": "card brand (e.g., Upper Deck, Panini, Topps)",
   "series": "series name (e.g., Series 1, Prizm)",
   "sport": "sport (hockey, basketball, football, baseball)",
   "parallel": "parallel/variant name if any (e.g., Young Guns, Prizm, Base)"
@@ -188,29 +188,17 @@ async function searchSportsCardsPro(cardInfo) {
 
     console.log(`${filteredProducts.length} matches after filtering`);
     
-    // If looking for Young Guns, prioritize base Upper Deck set cards
-    const queryLower = (cardInfo.parallel || '').toLowerCase();
-    const wantsYoungGuns = queryLower === 'young guns' || queryLower === 'young gun';
-    
-    if (wantsYoungGuns) {
-      filteredProducts.sort((a, b) => {
-        const aIsBase = a.consoleName.toLowerCase().match(/hockey cards \d{4} upper deck$/);
-        const bIsBase = b.consoleName.toLowerCase().match(/hockey cards \d{4} upper deck$/);
-        
-        if (aIsBase && !bIsBase) return -1;
-        if (!aIsBase && bIsBase) return 1;
-        return 0;
-      });
-    }
+    // Smart sorting based on card type and user intent
+    const sortedProducts = smartSort(filteredProducts, cardInfo);
     
     // Log all filtered products
     console.log('All filtered products (after sorting):');
-    filteredProducts.slice(0, 10).forEach((p, i) => {
+    sortedProducts.slice(0, 10).forEach((p, i) => {
       console.log(`  ${i + 1}. ${p.productName} - ${p.consoleName}`);
     });
 
     // Get the best match
-    const bestMatch = filteredProducts[0];
+    const bestMatch = sortedProducts[0];
     console.log('===== MATCHED CARD =====');
     console.log('Product name:', bestMatch.productName);
     console.log('Set name:', bestMatch.consoleName);
@@ -244,6 +232,55 @@ async function searchSportsCardsPro(cardInfo) {
   }
 }
 
+// Smart sorting to prioritize base sets
+function smartSort(products, cardInfo) {
+  const queryLower = (cardInfo.parallel || '').toLowerCase();
+  const sport = (cardInfo.sport || '').toLowerCase();
+  const brand = (cardInfo.brand || '').toLowerCase();
+  
+  // Check what user is looking for
+  const wantsYoungGuns = queryLower === 'young guns' || queryLower === 'young gun';
+  const wantsBase = queryLower === 'base' || queryLower === '';
+  
+  return products.sort((a, b) => {
+    const aName = (a.productName || '').toLowerCase();
+    const bName = (b.productName || '').toLowerCase();
+    const aConsole = (a.consoleName || '').toLowerCase();
+    const bConsole = (b.consoleName || '').toLowerCase();
+    const aFull = aName + ' ' + aConsole;
+    const bFull = bName + ' ' + bConsole;
+    
+    // For hockey Young Guns, prioritize base Upper Deck sets
+    if (sport === 'hockey' && wantsYoungGuns) {
+      const aIsBaseUD = aConsole.match(/hockey cards \d{4} upper deck$/);
+      const bIsBaseUD = bConsole.match(/hockey cards \d{4} upper deck$/);
+      
+      if (aIsBaseUD && !bIsBaseUD) return -1;
+      if (!aIsBaseUD && bIsBaseUD) return 1;
+    }
+    
+    // For basketball/baseball looking for base, prioritize simple brand sets
+    if (wantsBase && (sport === 'basketball' || sport === 'baseball')) {
+      // Check if it's a simple base set (just "Basketball Cards YYYY Brand" with no modifiers)
+      const aIsBase = aConsole.match(new RegExp(`^(basketball|baseball) cards \\d{4} ${brand}$`, 'i'));
+      const bIsBase = bConsole.match(new RegExp(`^(basketball|baseball) cards \\d{4} ${brand}$`, 'i'));
+      
+      if (aIsBase && !bIsBase) return -1;
+      if (!aIsBase && bIsBase) return 1;
+      
+      // De-prioritize special releases (Now, Chrome, Select, Prizm, etc.)
+      const specialReleases = ['now', 'chrome', 'select', 'prizm', 'optic', 'mosaic', 'donruss', 'hoops'];
+      const aHasSpecial = specialReleases.some(term => aFull.includes(term));
+      const bHasSpecial = specialReleases.some(term => bFull.includes(term));
+      
+      if (!aHasSpecial && bHasSpecial) return -1;
+      if (aHasSpecial && !bHasSpecial) return 1;
+    }
+    
+    return 0; // Keep original order if no priority rules apply
+  });
+}
+
 // Filter out unwanted variants
 function filterVariants(products, cardInfo) {
   const queryLower = (cardInfo.parallel || '').toLowerCase();
@@ -254,10 +291,11 @@ function filterVariants(products, cardInfo) {
     "outburst", "clear cut", "high gloss", "rainbow",
     "spectrum", "silver", "gold", "platinum",
     "refractor", "prizm", "foil",
-    "chrome", "sparkle", "shimmer", "jumbo"
+    "chrome", "sparkle", "shimmer", "jumbo",
+    "now"  // Added for Topps Now, Panini Now, etc.
   ];
   
-  // Check if user wants a specific variant (but NOT Young Guns, which is base)
+  // Check if user wants a specific variant
   const wantsYoungGuns = queryLower === 'young guns' || queryLower === 'young gun';
   const wantsConditionalVariant = conditionalVariants.some(term => queryLower.includes(term));
   
@@ -276,7 +314,7 @@ function filterVariants(products, cardInfo) {
       return false;
     }
     
-    // If user wants Young Guns (base rookie), accept cards with NO variant designation
+    // If user wants Young Guns (base rookie for hockey), accept cards with NO variant designation
     if (wantsYoungGuns) {
       // Check if product name has variant in brackets [...]
       if (product.productName.includes('[')) {
@@ -296,7 +334,7 @@ function filterVariants(products, cardInfo) {
       return true;
     }
     
-    // Filter out other variants unless specifically requested
+    // Filter out conditional variants unless specifically requested
     if (!wantsConditionalVariant) {
       for (const term of conditionalVariants) {
         if (fullText.includes(term)) {
