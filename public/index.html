@@ -1,790 +1,370 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Card Price Scanner</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-
-        .container {
-            max-width: 600px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            overflow: hidden;
-        }
-
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 30px;
-            text-align: center;
-        }
-
-        .header h1 {
-            font-size: 28px;
-            margin-bottom: 10px;
-        }
-
-        .header p {
-            opacity: 0.9;
-            font-size: 14px;
-        }
-
-        .currency-toggle {
-            margin-top: 20px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 15px;
-        }
-
-        .currency-toggle label {
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            padding: 8px 16px;
-            border-radius: 20px;
-            transition: all 0.3s ease;
-            background: rgba(255,255,255,0.2);
-        }
-
-        .currency-toggle input[type="radio"] {
-            display: none;
-        }
-
-        .currency-toggle input[type="radio"]:checked + label {
-            background: white;
-            color: #667eea;
-        }
-
-        .content {
-            padding: 30px;
-        }
-
-        .upload-area {
-            border: 3px dashed #667eea;
-            border-radius: 15px;
-            padding: 40px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            background: #f8f9ff;
-        }
-
-        .upload-area:hover {
-            border-color: #764ba2;
-            background: #f0f1ff;
-        }
-
-        .upload-area.dragover {
-            border-color: #764ba2;
-            background: #e8e9ff;
-            transform: scale(1.02);
-        }
-
-        .upload-icon {
-            font-size: 48px;
-            margin-bottom: 15px;
-        }
-
-        #fileInput {
-            display: none;
-        }
-
-        .btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 15px 30px;
-            border-radius: 25px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: transform 0.2s ease;
-            margin-top: 15px;
-            width: 100%;
-        }
-
-        .btn:hover {
-            transform: translateY(-2px);
-        }
-
-        .btn:active {
-            transform: translateY(0);
-        }
-
-        .btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .loading {
-            display: none;
-            text-align: center;
-            padding: 30px;
-        }
-
-        .loading.active {
-            display: block;
-        }
-
-        .spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #667eea;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .preview-container {
-            display: none;
-            margin: 20px 0;
-        }
-
-        .preview-container.active {
-            display: block;
-        }
-
-        .preview-image {
-            width: 100%;
-            border-radius: 10px;
-            margin-bottom: 15px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        }
-
-        .card-edit {
-            display: none;
-            background: #f8f9ff;
-            border-radius: 15px;
-            padding: 25px;
-            margin: 20px 0;
-        }
-
-        .card-edit.active {
-            display: block;
-        }
-
-        .card-edit h3 {
-            color: #667eea;
-            margin-bottom: 10px;
-            font-size: 20px;
-        }
-
-        .edit-instructions {
-            color: #666;
-            margin-bottom: 20px;
-            font-size: 14px;
-        }
-
-        .edit-field {
-            margin-bottom: 15px;
-        }
-
-        .edit-field label {
-            display: block;
-            font-weight: 600;
-            color: #666;
-            margin-bottom: 5px;
-            font-size: 14px;
-        }
-
-        .edit-field input,
-        .edit-field select {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 16px;
-            transition: border-color 0.3s ease;
-        }
-
-        .edit-field input:focus,
-        .edit-field select:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        .results {
-            display: none;
-            margin-top: 30px;
-        }
-
-        .results.active {
-            display: block;
-        }
-
-        .card-info {
-            background: #f8f9ff;
-            border-radius: 15px;
-            padding: 20px;
-            margin-bottom: 20px;
-        }
-
-        .card-info h3 {
-            color: #667eea;
-            margin-bottom: 15px;
-            font-size: 20px;
-        }
-
-        .info-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 10px 0;
-            border-bottom: 1px solid #e0e0e0;
-        }
-
-        .info-row:last-child {
-            border-bottom: none;
-        }
-
-        .info-label {
-            font-weight: 600;
-            color: #666;
-        }
-
-        .info-value {
-            color: #333;
-            text-align: right;
-        }
-
-        .pricing {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 15px;
-            padding: 25px;
-        }
-
-        .pricing h3 {
-            margin-bottom: 20px;
-            font-size: 20px;
-        }
-
-        .price-item {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 15px 0;
-        }
-
-        .price-value {
-            font-size: 48px;
-            font-weight: 700;
-        }
-
-        .sales-volume {
-            text-align: center;
-            margin-top: 15px;
-            padding-top: 15px;
-            border-top: 1px solid rgba(255,255,255,0.2);
-            font-size: 14px;
-            opacity: 0.9;
-        }
-
-        .error {
-            display: none;
-            background: #fee;
-            border: 2px solid #fcc;
-            border-radius: 10px;
-            padding: 20px;
-            margin: 20px 0;
-            color: #c33;
-        }
-
-        .error.active {
-            display: block;
-        }
-
-        .scan-another {
-            margin-top: 20px;
-        }
-
-        .btn-inventory {
-            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-            margin-top: 10px;
-        }
-
-        .exchange-rate-info {
-            text-align: center;
-            margin-top: 10px;
-            font-size: 12px;
-            opacity: 0.8;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sports Card Price Scanner</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .hidden { display: none; }
+    body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
+  </style>
 </head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🃏 Card Price Scanner</h1>
-            <p>Scan any sports card to get instant pricing</p>
-            
-            <div class="currency-toggle">
-                <input type="radio" name="currency" id="usd" value="USD" checked>
-                <label for="usd">USD 🇺🇸</label>
-                
-                <input type="radio" name="currency" id="cad" value="CAD">
-                <label for="cad">CAD 🇨🇦</label>
-            </div>
-            <div class="exchange-rate-info" id="exchangeRateInfo"></div>
-        </div>
-
-        <div class="content">
-            <div class="upload-area" id="uploadArea">
-                <div class="upload-icon">📸</div>
-                <h3>Take or Upload Card Photo</h3>
-                <p>Tap to take a photo or upload from gallery</p>
-                <input type="file" id="fileInput" accept="image/*" capture="environment">
-            </div>
-
-            <div class="preview-container" id="previewContainer">
-                <img id="previewImage" class="preview-image" alt="Card preview">
-                <button class="btn" id="identifyBtn">Identify Card</button>
-            </div>
-
-            <div class="card-edit" id="cardEdit">
-                <h3>Review Card Details</h3>
-                <p class="edit-instructions">Review and edit the card details below, then click "Get Price"</p>
-                
-                <div class="edit-field">
-                    <label for="editPlayer">Player Name</label>
-                    <input type="text" id="editPlayer" placeholder="Player name">
-                </div>
-
-                <div class="edit-field">
-                    <label for="editYear">Year</label>
-                    <input type="text" id="editYear" placeholder="e.g., 2024-25">
-                </div>
-
-                <div class="edit-field">
-                    <label for="editBrand">Brand</label>
-                    <input type="text" id="editBrand" placeholder="e.g., Upper Deck, Panini">
-                </div>
-
-                <div class="edit-field">
-                    <label for="editSeries">Series</label>
-                    <input type="text" id="editSeries" placeholder="e.g., Series 1, Prizm">
-                </div>
-
-                <div class="edit-field">
-                    <label for="editSport">Sport</label>
-                    <select id="editSport">
-                        <option value="hockey">Hockey</option>
-                        <option value="basketball">Basketball</option>
-                        <option value="football">Football</option>
-                        <option value="baseball">Baseball</option>
-                    </select>
-                </div>
-
-                <div class="edit-field">
-                    <label for="editParallel">Parallel/Variant</label>
-                    <input type="text" id="editParallel" placeholder="e.g., Young Guns, Prizm, Base">
-                </div>
-
-                <button class="btn" id="searchBtn">Get Price</button>
-            </div>
-
-            <div class="loading" id="loading">
-                <div class="spinner"></div>
-                <p>Analyzing card and fetching price...</p>
-            </div>
-
-            <div class="error" id="error">
-                <strong>Error:</strong> <span id="errorMessage"></span>
-            </div>
-
-            <div class="results" id="results">
-                <div class="card-info">
-                    <h3>Card Details</h3>
-                    <div class="info-row">
-                        <span class="info-label">Player:</span>
-                        <span class="info-value" id="player"></span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">Year:</span>
-                        <span class="info-value" id="year"></span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">Set:</span>
-                        <span class="info-value" id="set"></span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">Sport:</span>
-                        <span class="info-value" id="sport"></span>
-                    </div>
-                </div>
-
-                <div class="pricing">
-                    <h3>💰 Current Market Value (Raw/Ungraded)</h3>
-                    <div class="price-item">
-                        <span class="price-value main" id="rawPrice"></span>
-                    </div>
-                    <div class="sales-volume">
-                        Based on <strong id="salesVolume"></strong> tracked sales
-                    </div>
-                </div>
-
-                <button class="btn btn-inventory" id="addToInventory">Add to Inventory</button>
-                <button class="btn scan-another" id="scanAnother">Scan Another Card</button>
-            </div>
-        </div>
+<body class="p-4">
+  <div class="max-w-2xl mx-auto">
+    
+    <!-- Header with Currency Toggle -->
+    <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+      <h1 class="text-3xl font-bold text-center text-gray-800 mb-4">🃏 Card Price Scanner</h1>
+      
+      <!-- Currency Toggle -->
+      <div class="flex items-center justify-center gap-4 mb-2">
+        <button id="usdBtn" class="px-6 py-2 rounded-lg font-semibold bg-blue-600 text-white transition">
+          USD 🇺🇸
+        </button>
+        <button id="cadBtn" class="px-6 py-2 rounded-lg font-semibold bg-gray-200 text-gray-700 transition">
+          CAD 🇨🇦
+        </button>
+      </div>
+      
+      <div id="exchangeRate" class="text-center text-sm text-gray-600"></div>
     </div>
 
-    <script>
-        const uploadArea = document.getElementById('uploadArea');
-        const fileInput = document.getElementById('fileInput');
-        const previewContainer = document.getElementById('previewContainer');
-        const previewImage = document.getElementById('previewImage');
-        const identifyBtn = document.getElementById('identifyBtn');
-        const cardEdit = document.getElementById('cardEdit');
-        const searchBtn = document.getElementById('searchBtn');
-        const loading = document.getElementById('loading');
-        const error = document.getElementById('error');
-        const errorMessage = document.getElementById('errorMessage');
-        const results = document.getElementById('results');
-        const scanAnother = document.getElementById('scanAnother');
-        const addToInventory = document.getElementById('addToInventory');
-        const exchangeRateInfo = document.getElementById('exchangeRateInfo');
+    <!-- Upload Section -->
+    <div id="uploadSection" class="bg-white rounded-lg shadow-lg p-6 mb-6">
+      <label for="fileInput" class="block cursor-pointer">
+        <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-500 transition">
+          <div class="text-6xl mb-4">📸</div>
+          <h3 class="text-xl font-semibold mb-2">Take or Upload Card Photo</h3>
+          <p class="text-gray-600">Tap to take a photo or upload from gallery</p>
+        </div>
+      </label>
+      <input type="file" id="fileInput" accept="image/*" capture="environment" class="hidden">
+    </div>
 
-        const SHEET_URL = 'https://script.google.com/macros/s/AKfycbx4dRXRjphNuLHNTnssBALxoA24QphXlLhKF4AczdLFnz0Wk1PtvbESK3q2_jQBk4geSg/exec';
+    <!-- Preview Section -->
+    <div id="previewSection" class="hidden bg-white rounded-lg shadow-lg p-6 mb-6">
+      <img id="previewImage" class="w-full rounded-lg mb-4 shadow-md" alt="Card preview">
+      <button id="scanBtn" class="w-full bg-blue-600 text-white font-semibold py-3 rounded-lg hover:bg-blue-700 transition">
+        Scan Card for Price
+      </button>
+    </div>
 
-        let selectedFile = null;
-        let identifiedCardInfo = null;
-        let currentPricing = null;
-        let exchangeRate = null;
-        let selectedCurrency = 'USD';
-        let isLiveRate = false;
+    <!-- Loading -->
+    <div id="loading" class="hidden bg-white rounded-lg shadow-lg p-8 text-center">
+      <div class="inline-block w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+      <p class="text-gray-700">Analyzing card and getting price...</p>
+    </div>
 
-        // Fetch exchange rate on page load
-        async function fetchExchangeRate() {
-            try {
-                const response = await fetch('https://card-price-checker.onrender.com/api/exchange-rate');
-                const data = await response.json();
-                
-                if (data.success && !data.error) {
-                    // Live rate from API
-                    exchangeRate = data.rate;
-                    isLiveRate = true;
-                    exchangeRateInfo.textContent = `Exchange rate: 1 USD = ${data.rate.toFixed(4)} CAD`;
-                } else {
-                    // Fallback rate
-                    exchangeRate = data.rate || 1.4;
-                    isLiveRate = false;
-                    exchangeRateInfo.textContent = `Exchange rate: 1 USD ≈ ${exchangeRate.toFixed(1)} CAD (estimated)`;
-                }
-            } catch (err) {
-                console.error('Failed to fetch exchange rate:', err);
-                exchangeRate = 1.4;
-                isLiveRate = false;
-                exchangeRateInfo.textContent = `Exchange rate: 1 USD ≈ ${exchangeRate.toFixed(1)} CAD (estimated)`;
-            }
+    <!-- Error -->
+    <div id="error" class="hidden bg-red-100 border-2 border-red-400 rounded-lg p-4 mb-6">
+      <strong class="text-red-700">Error:</strong>
+      <span id="errorMessage" class="text-red-600"></span>
+    </div>
+
+    <!-- Results -->
+    <div id="results" class="hidden">
+      
+      <!-- Card Info -->
+      <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+        <h3 class="text-xl font-bold text-gray-800 mb-4">Card Details</h3>
+        <div class="space-y-2">
+          <div class="flex justify-between py-2 border-b">
+            <span class="font-semibold text-gray-600">Player:</span>
+            <span id="player" class="text-gray-800"></span>
+          </div>
+          <div class="flex justify-between py-2 border-b">
+            <span class="font-semibold text-gray-600">Year:</span>
+            <span id="year" class="text-gray-800"></span>
+          </div>
+          <div class="flex justify-between py-2 border-b">
+            <span class="font-semibold text-gray-600">Set:</span>
+            <span id="set" class="text-gray-800"></span>
+          </div>
+          <div class="flex justify-between py-2 border-b">
+            <span class="font-semibold text-gray-600">Card #:</span>
+            <span id="cardNumber" class="text-gray-800"></span>
+          </div>
+          <div class="flex justify-between py-2">
+            <span class="font-semibold text-gray-600">Sport:</span>
+            <span id="sport" class="text-gray-800"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pricing -->
+      <div class="bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg shadow-lg p-6 text-white mb-6">
+        <h3 class="text-xl font-bold mb-4">Raw Card Price</h3>
+        <div class="text-center mb-4">
+          <div class="text-5xl font-bold" id="rawPrice">-</div>
+          <div class="text-sm opacity-90 mt-2" id="priceSource">-</div>
+        </div>
+        <div class="text-center pt-4 border-t border-white border-opacity-30">
+          <div class="text-sm opacity-90" id="salesVolume">-</div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="space-y-3">
+        <button id="addToInventory" class="w-full bg-green-600 text-white font-semibold py-3 rounded-lg hover:bg-green-700 transition">
+          Add to Inventory
+        </button>
+        <button id="scanAnother" class="w-full bg-gray-600 text-white font-semibold py-3 rounded-lg hover:bg-gray-700 transition">
+          Scan Another Card
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // API Base URL
+    const API_URL = 'https://card-price-checker.onrender.com';
+    
+    // Elements
+    const fileInput = document.getElementById('fileInput');
+    const uploadSection = document.getElementById('uploadSection');
+    const previewSection = document.getElementById('previewSection');
+    const previewImage = document.getElementById('previewImage');
+    const scanBtn = document.getElementById('scanBtn');
+    const loading = document.getElementById('loading');
+    const error = document.getElementById('error');
+    const errorMessage = document.getElementById('errorMessage');
+    const results = document.getElementById('results');
+    const scanAnother = document.getElementById('scanAnother');
+    const addToInventory = document.getElementById('addToInventory');
+    const usdBtn = document.getElementById('usdBtn');
+    const cadBtn = document.getElementById('cadBtn');
+    const exchangeRateDiv = document.getElementById('exchangeRate');
+
+    // State
+    let selectedFile = null;
+    let currentCardInfo = null;
+    let currentPricing = null;
+    let currentCurrency = 'USD';
+    let exchangeRate = 1.4;
+
+    // Fetch exchange rate
+    async function fetchExchangeRate() {
+      try {
+        const response = await fetch(`${API_URL}/api/exchange-rate`);
+        const data = await response.json();
+        if (data.success) {
+          exchangeRate = data.rate;
+          const rateText = data.source === 'live' ? 
+            `Exchange rate: 1 USD ≈ ${exchangeRate.toFixed(4)} CAD (live)` :
+            `Exchange rate: 1 USD ≈ ${exchangeRate.toFixed(4)} CAD (estimated)`;
+          exchangeRateDiv.textContent = rateText;
+        }
+      } catch (err) {
+        console.error('Failed to fetch exchange rate:', err);
+        exchangeRateDiv.textContent = 'Exchange rate: 1 USD ≈ 1.40 CAD (estimated)';
+      }
+    }
+
+    // Initialize
+    fetchExchangeRate();
+
+    // Currency toggle
+    usdBtn.addEventListener('click', () => {
+      currentCurrency = 'USD';
+      usdBtn.classList.add('bg-blue-600', 'text-white');
+      usdBtn.classList.remove('bg-gray-200', 'text-gray-700');
+      cadBtn.classList.add('bg-gray-200', 'text-gray-700');
+      cadBtn.classList.remove('bg-blue-600', 'text-white');
+      if (currentPricing) {
+        updatePriceDisplay();
+      }
+    });
+
+    cadBtn.addEventListener('click', () => {
+      currentCurrency = 'CAD';
+      cadBtn.classList.add('bg-blue-600', 'text-white');
+      cadBtn.classList.remove('bg-gray-200', 'text-gray-700');
+      usdBtn.classList.add('bg-gray-200', 'text-gray-700');
+      usdBtn.classList.remove('bg-blue-600', 'text-white');
+      if (currentPricing) {
+        updatePriceDisplay();
+      }
+    });
+
+    // File input change
+    fileInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      selectedFile = file;
+      
+      // Show preview
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        previewImage.src = e.target.result;
+        uploadSection.classList.add('hidden');
+        previewSection.classList.remove('hidden');
+        error.classList.add('hidden');
+        results.classList.add('hidden');
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // Scan button
+    scanBtn.addEventListener('click', async () => {
+      if (!selectedFile) return;
+
+      // Show loading
+      previewSection.classList.add('hidden');
+      loading.classList.remove('hidden');
+      error.classList.add('hidden');
+      results.classList.add('hidden');
+
+      try {
+        // Convert image to base64
+        const base64Image = await fileToBase64(selectedFile);
+        
+        // Remove data URL prefix to get just the base64 string
+        const base64Data = base64Image.split(',')[1];
+
+        console.log('Sending image to server...');
+        console.log('Base64 length:', base64Data.length);
+
+        // Step 1: Identify card
+        const identifyResponse = await fetch(`${API_URL}/api/identify-card`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ image: base64Data })
+        });
+
+        if (!identifyResponse.ok) {
+          throw new Error('Failed to identify card');
         }
 
-        // Fetch exchange rate on load
-        fetchExchangeRate();
-
-        // Currency toggle handlers
-        document.querySelectorAll('input[name="currency"]').forEach(radio => {
-            radio.addEventListener('change', (e) => {
-                selectedCurrency = e.target.value;
-                
-                // If results are showing, update the displayed price
-                if (results.classList.contains('active') && currentPricing) {
-                    updatePriceDisplay(currentPricing);
-                }
-            });
-        });
-
-        // Convert price based on selected currency
-        function convertPrice(usdPrice) {
-            if (selectedCurrency === 'CAD' && exchangeRate) {
-                return usdPrice * exchangeRate;
-            }
-            return usdPrice;
+        const identifyData = await identifyResponse.json();
+        
+        if (!identifyData.success) {
+          throw new Error(identifyData.error || 'Failed to identify card');
         }
 
-        // Format price with currency symbol
-        function formatPrice(price) {
-            const symbol = selectedCurrency === 'CAD' ? 'C$' : '$';
-            return `${symbol}${price.toFixed(2)}`;
+        currentCardInfo = identifyData.cardInfo;
+        console.log('Card identified:', currentCardInfo);
+
+        // Step 2: Get price
+        const priceResponse = await fetch(`${API_URL}/api/get-price`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ cardInfo: currentCardInfo })
+        });
+
+        if (!priceResponse.ok) {
+          throw new Error('Failed to get price');
         }
 
-        // Upload area click
-        uploadArea.addEventListener('click', () => {
-            fileInput.click();
-        });
-
-        // Drag and drop
-        uploadArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadArea.classList.add('dragover');
-        });
-
-        uploadArea.addEventListener('dragleave', () => {
-            uploadArea.classList.remove('dragover');
-        });
-
-        uploadArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadArea.classList.remove('dragover');
-            
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                handleFile(files[0]);
-            }
-        });
-
-        // File input change
-        fileInput.addEventListener('change', (e) => {
-            if (e.target.files.length > 0) {
-                handleFile(e.target.files[0]);
-            }
-        });
-
-        // Handle file selection
-        function handleFile(file) {
-            if (!file.type.startsWith('image/')) {
-                showError('Please select an image file');
-                return;
-            }
-
-            selectedFile = file;
-            
-            // Show preview
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                previewImage.src = e.target.result;
-                previewContainer.classList.add('active');
-                uploadArea.style.display = 'none';
-                cardEdit.classList.remove('active');
-                error.classList.remove('active');
-                results.classList.remove('active');
-            };
-            reader.readAsDataURL(file);
+        const priceData = await priceResponse.json();
+        
+        if (!priceData.success || !priceData.pricing.found) {
+          throw new Error(priceData.pricing?.message || 'Card not found in database');
         }
 
-        // Identify button - Step 1: Use Claude Vision to read the card
-        identifyBtn.addEventListener('click', async () => {
-            if (!selectedFile) return;
-
-            // Show loading
-            loading.classList.add('active');
-            identifyBtn.disabled = true;
-            error.classList.remove('active');
-            cardEdit.classList.remove('active');
-
-            try {
-                // Create form data
-                const formData = new FormData();
-                formData.append('image', selectedFile);
-
-                // Call API to identify card
-                const response = await fetch('https://card-price-checker.onrender.com/api/identify-card', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                if (!response.ok) {
-                    throw new Error('Failed to identify card');
-                }
-
-                const data = await response.json();
-
-                // Hide loading
-                loading.classList.remove('active');
-                identifyBtn.disabled = false;
-
-                // Store the identified info
-                identifiedCardInfo = data.cardInfo;
-
-                // Populate edit fields
-                document.getElementById('editPlayer').value = data.cardInfo.player || '';
-                document.getElementById('editYear').value = data.cardInfo.year || '';
-                document.getElementById('editBrand').value = data.cardInfo.brand || '';
-                document.getElementById('editSeries').value = data.cardInfo.series || '';
-                document.getElementById('editSport').value = data.cardInfo.sport || 'hockey';
-                document.getElementById('editParallel').value = data.cardInfo.parallel || '';
-
-                // Show edit form
-                cardEdit.classList.add('active');
-
-            } catch (err) {
-                loading.classList.remove('active');
-                identifyBtn.disabled = false;
-                showError('Failed to identify card: ' + err.message);
-            }
-        });
-
-        // Search button - Step 2: Search SportsCardsPro with reviewed/edited info
-        searchBtn.addEventListener('click', async () => {
-            // Show loading
-            loading.classList.add('active');
-            searchBtn.disabled = true;
-            error.classList.remove('active');
-            results.classList.remove('active');
-
-            try {
-                // Get edited values
-                const cardInfo = {
-                    player: document.getElementById('editPlayer').value,
-                    year: document.getElementById('editYear').value,
-                    brand: document.getElementById('editBrand').value,
-                    series: document.getElementById('editSeries').value,
-                    sport: document.getElementById('editSport').value,
-                    parallel: document.getElementById('editParallel').value
-                };
-
-                // Search SportsCardsPro
-                const response = await fetch('https://card-price-checker.onrender.com/api/get-price', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(cardInfo)
-                });
-
-                if (!response.ok) {
-                    throw new Error('Failed to search for price');
-                }
-
-                const data = await response.json();
-
-                // Hide loading
-                loading.classList.remove('active');
-                searchBtn.disabled = false;
-
-                // Check if card was found
-                if (!data.pricing.found) {
-                    showError(data.pricing.message || 'Card not found in database');
-                    return;
-                }
-
-                // Store pricing for inventory button
-                currentPricing = data.pricing;
-
-                // Display results
-                displayResults(cardInfo, data.pricing);
-
-            } catch (err) {
-                loading.classList.remove('active');
-                searchBtn.disabled = false;
-                showError(err.message);
-            }
-        });
+        currentPricing = priceData.pricing;
+        console.log('Price retrieved:', currentPricing);
 
         // Display results
-        function displayResults(cardInfo, pricing) {
-            // Card details
-            document.getElementById('player').textContent = cardInfo.player;
-            document.getElementById('year').textContent = cardInfo.year;
-            document.getElementById('set').textContent = `${cardInfo.brand} ${cardInfo.series}`;
-            document.getElementById('sport').textContent = cardInfo.sport;
+        displayResults();
 
-            // Update price display
-            updatePriceDisplay(pricing);
+      } catch (err) {
+        console.error('Error:', err);
+        loading.classList.add('hidden');
+        error.classList.remove('hidden');
+        errorMessage.textContent = err.message;
+      }
+    });
 
-            // Show results
-            results.classList.add('active');
-        }
+    // Convert file to base64
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
 
-        // Update price display based on currency
-        function updatePriceDisplay(pricing) {
-            if (pricing.price) {
-                const convertedPrice = convertPrice(pricing.price);
-                document.getElementById('rawPrice').textContent = formatPrice(convertedPrice);
-            } else {
-                document.getElementById('rawPrice').textContent = 'N/A';
-            }
+    // Display results
+    function displayResults() {
+      loading.classList.add('hidden');
+      results.classList.remove('hidden');
 
-            document.getElementById('salesVolume').textContent = pricing.salesVolume;
-        }
+      // Card details
+      document.getElementById('player').textContent = currentCardInfo.player;
+      document.getElementById('year').textContent = currentCardInfo.year;
+      document.getElementById('set').textContent = `${currentCardInfo.brand} ${currentCardInfo.series}`;
+      document.getElementById('cardNumber').textContent = currentCardInfo.cardNumber;
+      document.getElementById('sport').textContent = currentCardInfo.sport;
 
-        // Add to inventory button
-        addToInventory.addEventListener('click', async () => {
-            addToInventory.disabled = true;
-            addToInventory.textContent = 'Adding...';
-            
-            try {
-                // Get the current card info with converted price
-                const priceToSave = currentPricing && currentPricing.price ? 
-                    convertPrice(currentPricing.price) : null;
-                
-                const cardData = {
-                    player: document.getElementById('editPlayer').value,
-                    year: document.getElementById('editYear').value,
-                    brand: document.getElementById('editBrand').value,
-                    series: document.getElementById('editSeries').value,
-                    sport: document.getElementById('editSport').value,
-                    parallel: document.getElementById('editParallel').value,
-                    price: priceToSave,
-                    currency: selectedCurrency
-                };
-                
-                const response = await fetch(SHEET_URL, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(cardData)
-                });
-                
-                // With no-cors, we can't read the response, so we assume success
-                addToInventory.textContent = '✓ Added to Inventory!';
-                addToInventory.style.background = '#28a745';
-                
-                setTimeout(() => {
-                    addToInventory.textContent = 'Add to Inventory';
-                    addToInventory.style.background = 'linear-gradient(135deg, #28a745 0%, #20c997 100%)';
-                    addToInventory.disabled = false;
-                }, 3000);
-                
-            } catch (err) {
-                addToInventory.textContent = 'Failed - Try Again';
-                addToInventory.disabled = false;
-                showError('Failed to add to inventory: ' + err.message);
-            }
-        });
+      // Update price display
+      updatePriceDisplay();
+    }
 
-        // Show error
-        function showError(message) {
-            errorMessage.textContent = message;
-            error.classList.add('active');
-        }
+    // Update price display based on currency
+    function updatePriceDisplay() {
+      const price = currentPricing.price;
+      const currencySymbol = currentCurrency === 'USD' ? '$' : 'C$';
+      const displayPrice = currentCurrency === 'USD' ? price : price * exchangeRate;
 
-        // Scan another button
-        scanAnother.addEventListener('click', () => {
-            selectedFile = null;
-            identifiedCardInfo = null;
-            currentPricing = null;
-            fileInput.value = '';
-            previewContainer.classList.remove('active');
-            cardEdit.classList.remove('active');
-            results.classList.remove('active');
-            error.classList.remove('active');
-            uploadArea.style.display = 'block';
-            addToInventory.textContent = 'Add to Inventory';
-            addToInventory.style.background = 'linear-gradient(135deg, #28a745 0%, #20c997 100%)';
-        });
-    </script>
+      document.getElementById('rawPrice').textContent = `${currencySymbol}${displayPrice.toFixed(2)}`;
+      document.getElementById('priceSource').textContent = currentPricing.source || 'SportsCardsPro';
+      document.getElementById('salesVolume').textContent = `${currentPricing.salesVolume} sales tracked`;
+    }
+
+    // Scan another
+    scanAnother.addEventListener('click', () => {
+      selectedFile = null;
+      currentCardInfo = null;
+      currentPricing = null;
+      fileInput.value = '';
+      previewSection.classList.add('hidden');
+      results.classList.add('hidden');
+      error.classList.add('hidden');
+      uploadSection.classList.remove('hidden');
+    });
+
+    // Add to inventory
+    addToInventory.addEventListener('click', async () => {
+      try {
+        const currencySymbol = currentCurrency === 'USD' ? '$' : 'C$';
+        const price = currentCurrency === 'USD' ? 
+          currentPricing.price : 
+          currentPricing.price * exchangeRate;
+
+        const response = await fetch(
+          'https://script.google.com/macros/s/AKfycbySXCDSo9YpGckzbvDWKXQN5l61VxAKvLMmFRv0g-VGb3WG7qpS-6Lb4JLO2ZDdgJMb/exec',
+          {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              player: currentCardInfo.player,
+              year: currentCardInfo.year,
+              brand: currentCardInfo.brand,
+              series: currentCardInfo.series,
+              cardNumber: currentCardInfo.cardNumber,
+              parallel: currentCardInfo.parallel || 'Base',
+              price: `${currencySymbol}${price.toFixed(2)}`
+            })
+          }
+        );
+
+        alert('✅ Card added to inventory!');
+      } catch (err) {
+        console.error('Error adding to inventory:', err);
+        alert('⚠️ Added to inventory (confirmation unavailable due to CORS)');
+      }
+    });
+  </script>
 </body>
 </html>
