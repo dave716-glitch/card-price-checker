@@ -1,3 +1,9 @@
+// Temporarily disable scraper
+module.exports = {
+  scrapeEbaySoldListings: async () => ({ success: false, message: 'Scraper disabled' })
+};
+return;
+
 const puppeteer = require('puppeteer');
 
 /**
