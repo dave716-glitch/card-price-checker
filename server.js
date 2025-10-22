@@ -1,31 +1,52 @@
 require('dotenv').config();
 const express = require('express');
-const multer = require('multer');
-const axios = require('axios');
 const Anthropic = require('@anthropic-ai/sdk');
-const fs = require('fs');
-const path = require('path');
+const cors = require('cors');
+const axios = require('axios');
+const { scrapeEbaySoldListings } = require('./ebay-scraper');
 
 const app = express();
-const upload = multer({ dest: 'uploads/' });
+const PORT = process.env.PORT || 3000;
 
+// Middleware
+app.use(cors());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.static('public'));
+
+// Initialize Anthropic client
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
+// SportsCardsPro token (fallback)
 const SPORTSCARDSPRO_TOKEN = process.env.SPORTSCARDSPRO_TOKEN;
 
-app.use(express.static('public'));
-app.use(express.json());
-
-// Card recognition endpoint - ONLY identifies the card
-app.post('/api/identify-card', upload.single('image'), async (req, res) => {
+// Exchange rate endpoint
+app.get('/api/exchange-rate', async (req, res) => {
   try {
-    const imagePath = req.file.path;
-    const imageData = fs.readFileSync(imagePath);
-    const base64Image = imageData.toString('base64');
+    const response = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
+    const data = await response.json();
+    res.json({ 
+      success: true, 
+      rate: data.rates.CAD,
+      source: 'live'
+    });
+  } catch (error) {
+    console.error('Exchange rate fetch failed:', error);
+    res.json({ 
+      success: true, 
+      rate: 1.4,
+      source: 'fallback'
+    });
+  }
+});
 
-    console.log('Analyzing card image...');
+// Identify card using Claude Vision
+app.post('/api/identify-card', async (req, res) => {
+  try {
+    const { image } = req.body;
+
+    console.log('🔍 Analyzing card image...');
 
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
@@ -38,187 +59,177 @@ app.post('/api/identify-card', upload.single('image'), async (req, res) => {
               type: 'image',
               source: {
                 type: 'base64',
-                media_type: req.file.mimetype,
-                data: base64Image,
+                media_type: 'image/jpeg',
+                data: image,
               },
             },
             {
               type: 'text',
-              text: `Analyze this sports card image and extract the following information in JSON format:
+              text: `Analyze this sports card and extract the following information:
+- Player name (first and last name)
+- Year (the season, like "2023-24" or "2024-25")
+- Brand (Upper Deck, Topps, Panini, etc.)
+- Series (Series 1, Series 2, Chrome, Prizm, etc. - if visible)
+- Sport (hockey, basketball, baseball, football, soccer)
+- Card number (if visible)
+- Parallel/variant (if any special designation like Prizm, Refractor, etc.)
+
+Return ONLY a JSON object with this structure:
 {
-  "player": "player name",
-  "year": "year (e.g., 2024-25)",
-  "brand": "card brand (e.g., Upper Deck, Panini, Topps)",
-  "series": "series name (e.g., Series 1, Prizm)",
-  "sport": "sport (hockey, basketball, football, baseball)",
-  "parallel": "parallel/variant name if any (e.g., Young Guns, Prizm, Base)"
+  "player": "Player Name",
+  "year": "2024-25",
+  "brand": "Brand Name",
+  "series": "Series Name",
+  "sport": "sport name",
+  "cardNumber": "123" or "Not visible",
+  "parallel": "Base" or "variant name"
 }
 
-Be precise with the information. If something is unclear, use your best judgment. For hockey rookies in Upper Deck, "Young Guns" is the standard rookie card designation.`
+If the card number is not visible, use "Not visible". If there's no parallel/variant, use "Base". If it's a checklist card with multiple players, include both names separated by " & ". Only return the JSON, nothing else.`
             }
           ],
         },
       ],
     });
 
-    fs.unlinkSync(imagePath);
-
-    const responseText = message.content[0].text;
-    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    const cardInfo = JSON.parse(message.content[0].text);
+    console.log('✅ Card identified:', cardInfo);
     
-    if (!jsonMatch) {
-      throw new Error('Could not extract card information');
-    }
-
-    const cardInfo = JSON.parse(jsonMatch[0]);
-    console.log('Card identified:', cardInfo);
-
-    res.json({
-      success: true,
-      cardInfo: cardInfo
-    });
-
+    res.json({ success: true, cardInfo });
   } catch (error) {
-    console.error('Error processing card:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    console.error('❌ Error identifying card:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// Separate endpoint to get price based on card info
+// Get price using eBay scraper (with SportsCardsPro fallback)
 app.post('/api/get-price', async (req, res) => {
   try {
-    const cardInfo = req.body;
-    console.log('Getting price for card:', cardInfo);
+    const { cardInfo } = req.body;
     
-    const pricing = await searchSportsCardsPro(cardInfo);
+    console.log('\n========== GETTING PRICE ==========');
+    console.log('Card:', cardInfo);
     
-    res.json({
-      success: true,
-      pricing: pricing
-    });
+    // Try eBay scraper first
+    console.log('💻 Trying eBay scraper...');
+    const scraperResult = await scrapeEbaySoldListings(cardInfo);
     
-  } catch (error) {
-    console.error('Error getting price:', error);
-    res.status(500).json({
+    if (scraperResult.success) {
+      console.log('✅ eBay scraper succeeded!');
+      return res.json({
+        success: true,
+        pricing: {
+          found: true,
+          price: scraperResult.averagePrice,
+          salesVolume: scraperResult.soldCount,
+          priceRange: scraperResult.priceRange,
+          source: 'eBay Scraper (Live Data)',
+          cardName: `${cardInfo.player} ${cardInfo.year}`,
+          setName: `${cardInfo.brand} ${cardInfo.series}`
+        }
+      });
+    }
+    
+    // Fallback to SportsCardsPro
+    console.log('⚠️ eBay scraper failed, falling back to SportsCardsPro...');
+    console.log('Scraper error:', scraperResult.message || scraperResult.error);
+    
+    const sportsCardsProResult = await searchSportsCardsPro(cardInfo);
+    
+    if (sportsCardsProResult.found) {
+      console.log('✅ SportsCardsPro fallback succeeded!');
+      return res.json({
+        success: true,
+        pricing: {
+          ...sportsCardsProResult,
+          source: 'SportsCardsPro (Fallback)'
+        }
+      });
+    }
+    
+    // Both failed
+    console.log('❌ Both eBay scraper and SportsCardsPro failed');
+    return res.json({
       success: false,
-      error: error.message
+      pricing: {
+        found: false,
+        message: 'Could not find pricing for this card from any source'
+      }
     });
-  }
-});
-
-// Exchange rate endpoint
-app.get('/api/exchange-rate', async (req, res) => {
-  try {
-    // Using exchangerate-api.com (free tier, no API key needed)
-    const response = await axios.get('https://api.exchangerate-api.com/v4/latest/USD');
-    const cadRate = response.data.rates.CAD;
     
-    res.json({
-      success: true,
-      rate: cadRate,
-      timestamp: new Date().toISOString()
-    });
   } catch (error) {
-    console.error('Exchange rate fetch error:', error);
-    // Return fallback with error flag
-    res.json({
-      success: true,
-      rate: 1.4,
-      timestamp: new Date().toISOString(),
-      error: 'Using fallback rate'
+    console.error('❌ Error getting price:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message,
+      pricing: {
+        found: false,
+        message: 'Error retrieving price'
+      }
     });
   }
 });
 
-// Search SportsCardsPro for pricing
+// SportsCardsPro search function (fallback)
 async function searchSportsCardsPro(cardInfo) {
   try {
-    console.log('Searching for price with card info:', cardInfo);
+    // Build search query
+    const searchTerms = [
+      cardInfo.player,
+      cardInfo.year,
+      cardInfo.brand,
+      cardInfo.series,
+      cardInfo.cardNumber !== 'Not visible' ? cardInfo.cardNumber : '',
+      cardInfo.parallel !== 'Base' ? cardInfo.parallel : ''
+    ].filter(term => term).join(' ');
     
-    // Search query without card number
-    const query = `${cardInfo.player} ${cardInfo.brand} ${cardInfo.year.split('-')[0]}`.trim();
-    console.log('Searching SportsCardsPro with query:', query);
+    console.log('SportsCardsPro search:', searchTerms);
     
-    // Search for the card
-    const searchUrl = `https://www.sportscardspro.com/api/search?t=${SPORTSCARDSPRO_TOKEN}&q=${encodeURIComponent(query)}`;
-    console.log('Fetching from SportsCardsPro...');
-    
+    const searchUrl = `https://www.sportscardspro.com/api/search?t=${SPORTSCARDSPRO_TOKEN}&q=${encodeURIComponent(searchTerms)}&category=Non-Sport`;
     const searchResponse = await axios.get(searchUrl);
-    const responseData = searchResponse.data;
     
-    // Handle different response formats
-    let products = [];
-    if (Array.isArray(responseData)) {
-      products = responseData;
-    } else if (responseData && responseData.products) {
-      products = responseData.products;
-    } else if (responseData && responseData.results) {
-      products = responseData.results;
-    } else {
-      console.log('Unexpected response format');
+    if (searchResponse.data.status !== 'success' || !searchResponse.data.results || searchResponse.data.results.length === 0) {
       return {
         found: false,
-        message: 'Unexpected API response format'
+        message: 'Card not found in SportsCardsPro database'
       };
     }
     
-    if (!products || products.length === 0) {
-      console.log('No products found');
+    // Filter and sort results
+    let products = searchResponse.data.results;
+    products = filterVariants(products, cardInfo);
+    products = smartSort(products, cardInfo);
+    
+    if (products.length === 0) {
       return {
         found: false,
-        message: 'Card not found in database'
+        message: 'No matching cards found after filtering'
       };
     }
-
-    console.log(`Found ${products.length} potential matches`);
     
-    // Filter variants
-    const filteredProducts = filterVariants(products, cardInfo);
+    const bestMatch = products[0];
     
-    if (filteredProducts.length === 0) {
-      console.log('No matches after filtering variants');
+    // Get detailed pricing
+    const detailsUrl = `https://www.sportscardspro.com/api/product?t=${SPORTSCARDSPRO_TOKEN}&id=${bestMatch.id}`;
+    const detailsResponse = await axios.get(detailsUrl);
+    const details = detailsResponse.data;
+    
+    if (details.status !== 'success') {
       return {
         found: false,
-        message: 'No matching cards after filtering'
+        message: 'Could not retrieve pricing details'
       };
     }
-
-    console.log(`${filteredProducts.length} matches after filtering`);
     
-    // Smart sorting based on card type and user intent
-    const sortedProducts = smartSort(filteredProducts, cardInfo);
-    
-    // Log all filtered products
-    console.log('All filtered products (after sorting):');
-    sortedProducts.slice(0, 10).forEach((p, i) => {
-      console.log(`  ${i + 1}. ${p.productName} - ${p.consoleName}`);
-    });
-
-    // Get the best match
-    const bestMatch = sortedProducts[0];
-    console.log('===== MATCHED CARD =====');
-    console.log('Product name:', bestMatch.productName);
-    console.log('Set name:', bestMatch.consoleName);
-    console.log('Card ID:', bestMatch.id);
-    console.log('========================');
-    
-    // Extract raw price from search results
-    const rawPriceString = bestMatch.price1;
-    const rawPrice = rawPriceString ? parseFloat(rawPriceString.replace('$', '')) : null;
-    
-    console.log('===== PRICING =====');
-    console.log('Raw price:', rawPrice);
-    console.log('===================');
+    const rawPrice = details['loose-price'] ? parseFloat(details['loose-price']) / 100 : null;
+    const salesVolume = details['sales-volume'] || 'Unknown';
     
     return {
       found: true,
-      cardName: bestMatch.productName,
-      setName: bestMatch.consoleName,
+      cardName: bestMatch['product-name'],
+      setName: bestMatch['console-name'],
       price: rawPrice,
-      salesVolume: 'N/A',
+      salesVolume: salesVolume,
       cardId: bestMatch.id
     };
     
@@ -226,121 +237,38 @@ async function searchSportsCardsPro(cardInfo) {
     console.error('SportsCardsPro search error:', error.message);
     return {
       found: false,
-      message: 'Error searching SportsCardsPro',
-      error: error.message
+      message: 'Error searching SportsCardsPro'
     };
   }
 }
 
-// Smart sorting to prioritize base sets
-function smartSort(products, cardInfo) {
-  const queryLower = (cardInfo.parallel || '').toLowerCase();
-  const sport = (cardInfo.sport || '').toLowerCase();
-  const brand = (cardInfo.brand || '').toLowerCase();
-  
-  // Check what user is looking for
-  const wantsYoungGuns = queryLower === 'young guns' || queryLower === 'young gun';
-  const wantsBase = queryLower === 'base' || queryLower === '';
-  
-  return products.sort((a, b) => {
-    const aName = (a.productName || '').toLowerCase();
-    const bName = (b.productName || '').toLowerCase();
-    const aConsole = (a.consoleName || '').toLowerCase();
-    const bConsole = (b.consoleName || '').toLowerCase();
-    const aFull = aName + ' ' + aConsole;
-    const bFull = bName + ' ' + bConsole;
-    
-    // For hockey Young Guns, prioritize base Upper Deck sets
-    if (sport === 'hockey' && wantsYoungGuns) {
-      const aIsBaseUD = aConsole.match(/hockey cards \d{4} upper deck$/);
-      const bIsBaseUD = bConsole.match(/hockey cards \d{4} upper deck$/);
-      
-      if (aIsBaseUD && !bIsBaseUD) return -1;
-      if (!aIsBaseUD && bIsBaseUD) return 1;
-    }
-    
-    // For basketball/baseball looking for base, prioritize simple brand sets
-    if (wantsBase && (sport === 'basketball' || sport === 'baseball')) {
-      // Check if it's a simple base set (just "Basketball Cards YYYY Brand" with no modifiers)
-      const aIsBase = aConsole.match(new RegExp(`^(basketball|baseball) cards \\d{4} ${brand}$`, 'i'));
-      const bIsBase = bConsole.match(new RegExp(`^(basketball|baseball) cards \\d{4} ${brand}$`, 'i'));
-      
-      if (aIsBase && !bIsBase) return -1;
-      if (!aIsBase && bIsBase) return 1;
-      
-      // De-prioritize special releases (Now, Chrome, Select, Prizm, etc.)
-      const specialReleases = ['now', 'chrome', 'select', 'prizm', 'optic', 'mosaic', 'donruss', 'hoops'];
-      const aHasSpecial = specialReleases.some(term => aFull.includes(term));
-      const bHasSpecial = specialReleases.some(term => bFull.includes(term));
-      
-      if (!aHasSpecial && bHasSpecial) return -1;
-      if (aHasSpecial && !bHasSpecial) return 1;
-    }
-    
-    return 0; // Keep original order if no priority rules apply
-  });
-}
-
-// Filter out unwanted variants
 function filterVariants(products, cardInfo) {
   const queryLower = (cardInfo.parallel || '').toLowerCase();
-  
-  // Variants to exclude unless specifically requested
   const conditionalVariants = [
     "canvas", "exclusive", "acetate", "deluxe", 
     "outburst", "clear cut", "high gloss", "rainbow",
     "spectrum", "silver", "gold", "platinum",
-    "refractor", "prizm", "foil",
-    "chrome", "sparkle", "shimmer", "jumbo",
-    "now"  // Added for Topps Now, Panini Now, etc.
+    "parallel", "refractor", "prizm", "foil",
+    "chrome", "sparkle", "shimmer", "now"
   ];
   
-  // Check if user wants a specific variant
-  const wantsYoungGuns = queryLower === 'young guns' || queryLower === 'young gun';
+  const wantsSpecificVariant = queryLower && queryLower !== 'base' && queryLower !== '';
   const wantsConditionalVariant = conditionalVariants.some(term => queryLower.includes(term));
   
   return products.filter(product => {
-    // Skip products without required fields
-    if (!product.productName || !product.consoleName) {
-      return false;
-    }
-    
-    const productName = product.productName.toLowerCase();
-    const consoleName = product.consoleName.toLowerCase();
+    const productName = product['product-name'].toLowerCase();
+    const consoleName = product['console-name'].toLowerCase();
     const fullText = productName + ' ' + consoleName;
     
-    // ALWAYS filter out oversized
-    if (fullText.includes('oversized')) {
-      return false;
+    if (fullText.includes('oversized')) return false;
+    
+    if (wantsSpecificVariant) {
+      if (!fullText.includes(queryLower)) return false;
     }
     
-    // If user wants Young Guns (base rookie for hockey), accept cards with NO variant designation
-    if (wantsYoungGuns) {
-      // Check if product name has variant in brackets [...]
-      if (product.productName.includes('[')) {
-        console.log('Filtering out (has variant in brackets):', product.productName);
-        return false;
-      }
-      
-      // Filter out any cards with variant terms in consoleName
-      for (const term of conditionalVariants) {
-        if (fullText.includes(term)) {
-          console.log(`Filtering out variant (${term}):`, product.productName);
-          return false;
-        }
-      }
-      
-      // This is a base card - keep it!
-      return true;
-    }
-    
-    // Filter out conditional variants unless specifically requested
     if (!wantsConditionalVariant) {
       for (const term of conditionalVariants) {
-        if (fullText.includes(term)) {
-          console.log(`Filtering out variant (${term}):`, product.productName);
-          return false;
-        }
+        if (fullText.includes(term)) return false;
       }
     }
     
@@ -348,7 +276,35 @@ function filterVariants(products, cardInfo) {
   });
 }
 
-const PORT = process.env.PORT || 3000;
+function smartSort(products, cardInfo) {
+  return products.sort((a, b) => {
+    const aName = a['console-name'].toLowerCase();
+    const bName = b['console-name'].toLowerCase();
+    const sport = cardInfo.sport.toLowerCase();
+    
+    if (sport === 'basketball' || sport === 'baseball') {
+      const aIsBase = !['now', 'chrome', 'select', 'prizm', 'optic', 'mosaic', 'contenders']
+        .some(keyword => aName.includes(keyword));
+      const bIsBase = !['now', 'chrome', 'select', 'prizm', 'optic', 'mosaic', 'contenders']
+        .some(keyword => bName.includes(keyword));
+      
+      if (aIsBase && !bIsBase) return -1;
+      if (!aIsBase && bIsBase) return 1;
+    }
+    
+    if (sport === 'hockey') {
+      const aIsFlagship = aName.match(/^hockey cards \d{4}(-\d{2})? upper deck$/);
+      const bIsFlagship = bName.match(/^hockey cards \d{4}(-\d{2})? upper deck$/);
+      
+      if (aIsFlagship && !bIsFlagship) return -1;
+      if (!aIsFlagship && bIsFlagship) return 1;
+    }
+    
+    return aName.split(' ').length - bName.split(' ').length;
+  });
+}
+
 app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`🚀 Server running on http://localhost:${PORT}`);
+  console.log('💻 eBay scraper enabled with SportsCardsPro fallback');
 });
