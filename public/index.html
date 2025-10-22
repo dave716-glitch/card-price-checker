@@ -46,14 +46,48 @@
     <div id="previewSection" class="hidden bg-white rounded-lg shadow-lg p-6 mb-6">
       <img id="previewImage" class="w-full rounded-lg mb-4 shadow-md" alt="Card preview">
       <button id="scanBtn" class="w-full bg-blue-600 text-white font-semibold py-3 rounded-lg hover:bg-blue-700 transition">
-        Scan Card for Price
+        Identify Card
       </button>
     </div>
 
     <!-- Loading -->
     <div id="loading" class="hidden bg-white rounded-lg shadow-lg p-8 text-center">
       <div class="inline-block w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-      <p class="text-gray-700">Analyzing card and getting price...</p>
+      <p id="loadingText" class="text-gray-700">Analyzing card...</p>
+    </div>
+
+    <!-- Card Edit Form (NEW!) -->
+    <div id="editSection" class="hidden bg-white rounded-lg shadow-lg p-6 mb-6">
+      <h3 class="text-xl font-bold text-gray-800 mb-4">Card Details - Review & Edit</h3>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-semibold text-gray-600 mb-1">Player Name</label>
+          <input type="text" id="editPlayer" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-600 mb-1">Year (e.g., 2024-25)</label>
+          <input type="text" id="editYear" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-600 mb-1">Brand</label>
+          <input type="text" id="editBrand" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-600 mb-1">Series (e.g., Series 1, Chrome, Prizm)</label>
+          <input type="text" id="editSeries" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-600 mb-1">Card Number</label>
+          <input type="text" id="editCardNumber" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-600 mb-1">Parallel/Variant</label>
+          <input type="text" id="editParallel" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Base">
+        </div>
+      </div>
+      <button id="getPriceBtn" class="w-full mt-6 bg-green-600 text-white font-semibold py-3 rounded-lg hover:bg-green-700 transition">
+        Get Price
+      </button>
     </div>
 
     <!-- Error -->
@@ -127,7 +161,10 @@
     const previewSection = document.getElementById('previewSection');
     const previewImage = document.getElementById('previewImage');
     const scanBtn = document.getElementById('scanBtn');
+    const editSection = document.getElementById('editSection');
+    const getPriceBtn = document.getElementById('getPriceBtn');
     const loading = document.getElementById('loading');
+    const loadingText = document.getElementById('loadingText');
     const error = document.getElementById('error');
     const errorMessage = document.getElementById('errorMessage');
     const results = document.getElementById('results');
@@ -201,20 +238,23 @@
         previewImage.src = e.target.result;
         uploadSection.classList.add('hidden');
         previewSection.classList.remove('hidden');
+        editSection.classList.add('hidden');
         error.classList.add('hidden');
         results.classList.add('hidden');
       };
       reader.readAsDataURL(file);
     });
 
-    // Scan button
+    // Scan button - ONLY identifies card
     scanBtn.addEventListener('click', async () => {
       if (!selectedFile) return;
 
       // Show loading
       previewSection.classList.add('hidden');
       loading.classList.remove('hidden');
+      loadingText.textContent = 'Analyzing card...';
       error.classList.add('hidden');
+      editSection.classList.add('hidden');
       results.classList.add('hidden');
 
       try {
@@ -225,9 +265,8 @@
         const base64Data = base64Image.split(',')[1];
 
         console.log('Sending image to server...');
-        console.log('Base64 length:', base64Data.length);
 
-        // Step 1: Identify card
+        // ONLY identify card
         const identifyResponse = await fetch(`${API_URL}/api/identify-card`, {
           method: 'POST',
           headers: {
@@ -249,7 +288,46 @@
         currentCardInfo = identifyData.cardInfo;
         console.log('Card identified:', currentCardInfo);
 
-        // Step 2: Get price
+        // Show edit form with identified data
+        document.getElementById('editPlayer').value = currentCardInfo.player || '';
+        document.getElementById('editYear').value = currentCardInfo.year || '';
+        document.getElementById('editBrand').value = currentCardInfo.brand || '';
+        document.getElementById('editSeries').value = currentCardInfo.series || '';
+        document.getElementById('editCardNumber').value = currentCardInfo.cardNumber || '';
+        document.getElementById('editParallel').value = currentCardInfo.parallel || 'Base';
+
+        loading.classList.add('hidden');
+        editSection.classList.remove('hidden');
+
+      } catch (err) {
+        console.error('Error:', err);
+        loading.classList.add('hidden');
+        error.classList.remove('hidden');
+        errorMessage.textContent = err.message;
+        previewSection.classList.remove('hidden');
+      }
+    });
+
+    // Get Price button - uses edited card info
+    getPriceBtn.addEventListener('click', async () => {
+      // Get edited values
+      currentCardInfo = {
+        player: document.getElementById('editPlayer').value,
+        year: document.getElementById('editYear').value,
+        brand: document.getElementById('editBrand').value,
+        series: document.getElementById('editSeries').value,
+        cardNumber: document.getElementById('editCardNumber').value,
+        parallel: document.getElementById('editParallel').value || 'Base',
+        sport: currentCardInfo.sport // Keep original sport
+      };
+
+      // Show loading
+      editSection.classList.add('hidden');
+      loading.classList.remove('hidden');
+      loadingText.textContent = 'Getting price...';
+      error.classList.add('hidden');
+
+      try {
         const priceResponse = await fetch(`${API_URL}/api/get-price`, {
           method: 'POST',
           headers: {
@@ -265,7 +343,7 @@
         const priceData = await priceResponse.json();
         
         if (!priceData.success || !priceData.pricing.found) {
-          throw new Error(priceData.pricing?.message || 'Card not found in database');
+          throw new Error(priceData.pricing?.message || 'Could not find pricing for this card from any source');
         }
 
         currentPricing = priceData.pricing;
@@ -279,6 +357,7 @@
         loading.classList.add('hidden');
         error.classList.remove('hidden');
         errorMessage.textContent = err.message;
+        editSection.classList.remove('hidden');
       }
     });
 
@@ -326,6 +405,7 @@
       currentPricing = null;
       fileInput.value = '';
       previewSection.classList.add('hidden');
+      editSection.classList.add('hidden');
       results.classList.add('hidden');
       error.classList.add('hidden');
       uploadSection.classList.remove('hidden');
