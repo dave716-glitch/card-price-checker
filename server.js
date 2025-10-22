@@ -1,43 +1,35 @@
-require('dotenv').config();
 const express = require('express');
 const Anthropic = require('@anthropic-ai/sdk');
-const cors = require('cors');
 const axios = require('axios');
+const cors = require('cors');
 const { scrapeEbaySoldListings } = require('./ebay-scraper');
+require('dotenv').config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const port = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
 app.use(express.static('public'));
 
 // Initialize Anthropic client
 const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
+  apiKey: process.env.ANTHROPIC_API_KEY
 });
 
-// SportsCardsPro token (fallback)
+// SportsCardsPro API config
 const SPORTSCARDSPRO_TOKEN = process.env.SPORTSCARDSPRO_TOKEN;
 
 // Exchange rate endpoint
 app.get('/api/exchange-rate', async (req, res) => {
   try {
-    const response = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
-    const data = await response.json();
-    res.json({ 
-      success: true, 
-      rate: data.rates.CAD,
-      source: 'live'
-    });
+    const response = await axios.get('https://api.exchangerate-api.com/v4/latest/USD');
+    const rate = response.data.rates.CAD;
+    res.json({ success: true, rate, source: 'live' });
   } catch (error) {
-    console.error('Exchange rate fetch failed:', error);
-    res.json({ 
-      success: true, 
-      rate: 1.4,
-      source: 'fallback'
-    });
+    console.error('Exchange rate API error:', error.message);
+    res.json({ success: true, rate: 1.4, source: 'fallback' });
   }
 });
 
@@ -92,28 +84,37 @@ If the card number is not visible, use "Not visible". If there's no parallel/var
       ],
     });
 
-// Strip markdown code blocks if present
-let cleanContent = message.content[0].text.trim();
-if (cleanContent.startsWith('```')) {
-  cleanContent = cleanContent.replace(/^```json\n?/g, '').replace(/\n?```$/g, '');
-}
-const cardInfo = JSON.parse(cleanContent);    console.log('✅ Card identified:', cardInfo);
-    
-    res.json({ success: true, cardInfo });
+    // Strip markdown code blocks if present
+    let cleanContent = message.content[0].text.trim();
+    if (cleanContent.startsWith('```')) {
+      cleanContent = cleanContent.replace(/^```json\n?/g, '').replace(/\n?```$/g, '');
+    }
+    const cardInfo = JSON.parse(cleanContent);
+
+    console.log('✅ Card identified:', cardInfo);
+
+    res.json({
+      success: true,
+      cardInfo
+    });
+
   } catch (error) {
     console.error('❌ Error identifying card:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
   }
 });
 
-// Get price using eBay scraper (with SportsCardsPro fallback)
+// Get price for identified card
 app.post('/api/get-price', async (req, res) => {
   try {
     const { cardInfo } = req.body;
-    
-    console.log('\n========== GETTING PRICE ==========');
+
+    console.log('========== GETTING PRICE ==========');
     console.log('Card:', cardInfo);
-    
+
     // Try eBay scraper first
     console.log('💻 Trying eBay scraper...');
     const scraperResult = await scrapeEbaySoldListings(cardInfo);
@@ -126,19 +127,20 @@ app.post('/api/get-price', async (req, res) => {
           found: true,
           price: scraperResult.averagePrice,
           salesVolume: scraperResult.soldCount,
-          priceRange: scraperResult.priceRange,
-          source: 'eBay Scraper (Live Data)',
-          cardName: `${cardInfo.player} ${cardInfo.year}`,
-          setName: `${cardInfo.brand} ${cardInfo.series}`
+          source: 'eBay (Live Sold Listings)',
+          priceRange: scraperResult.priceRange
         }
       });
     }
-    
+
     // Fallback to SportsCardsPro
     console.log('⚠️ eBay scraper failed, falling back to SportsCardsPro...');
     console.log('Scraper error:', scraperResult.message || scraperResult.error);
     
     const sportsCardsProResult = await searchSportsCardsPro(cardInfo);
+    
+    // ADD DETAILED LOGGING
+    console.log('SportsCardsPro result:', JSON.stringify(sportsCardsProResult, null, 2));
     
     if (sportsCardsProResult.found) {
       console.log('✅ SportsCardsPro fallback succeeded!');
@@ -151,7 +153,7 @@ app.post('/api/get-price', async (req, res) => {
       });
     }
     
-    // Both failed
+    // Both methods failed
     console.log('❌ Both eBay scraper and SportsCardsPro failed');
     return res.json({
       success: false,
@@ -160,155 +162,152 @@ app.post('/api/get-price', async (req, res) => {
         message: 'Could not find pricing for this card from any source'
       }
     });
-    
+
   } catch (error) {
     console.error('❌ Error getting price:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message,
-      pricing: {
-        found: false,
-        message: 'Error retrieving price'
-      }
+    res.status(500).json({
+      success: false,
+      error: error.message
     });
   }
 });
 
-// SportsCardsPro search function (fallback)
+// Search SportsCardsPro API
 async function searchSportsCardsPro(cardInfo) {
   try {
+    const { player, year, brand, series, cardNumber, parallel, sport } = cardInfo;
+    
     // Build search query
-    const searchTerms = [
-      cardInfo.player,
-      cardInfo.year,
-      cardInfo.brand,
-      cardInfo.series,
-      cardInfo.cardNumber !== 'Not visible' ? cardInfo.cardNumber : '',
-      cardInfo.parallel !== 'Base' ? cardInfo.parallel : ''
-    ].filter(term => term).join(' ');
-    
+    const searchTerms = [player, year, brand, series].filter(t => t && t !== 'Not visible').join(' ');
     console.log('SportsCardsPro search:', searchTerms);
-    
-    const searchUrl = `https://www.sportscardspro.com/api/search?t=${SPORTSCARDSPRO_TOKEN}&q=${encodeURIComponent(searchTerms)}&category=Non-Sport`;
-    const searchResponse = await axios.get(searchUrl);
-    
-    if (searchResponse.data.status !== 'success' || !searchResponse.data.results || searchResponse.data.results.length === 0) {
-      return {
-        found: false,
-        message: 'Card not found in SportsCardsPro database'
-      };
+
+    const response = await axios.get('https://api.sportscardspro.com/v1/search', {
+      params: {
+        q: searchTerms,
+        token: SPORTSCARDSPRO_TOKEN
+      },
+      timeout: 10000
+    });
+
+    if (!response.data || !response.data.results || response.data.results.length === 0) {
+      return { found: false, message: 'No results found' };
     }
-    
+
     // Filter and sort results
-    let products = searchResponse.data.results;
-    products = filterVariants(products, cardInfo);
-    products = smartSort(products, cardInfo);
+    const filteredCards = filterAndSortCards(response.data.results, cardInfo);
     
-    if (products.length === 0) {
-      return {
-        found: false,
-        message: 'No matching cards found after filtering'
-      };
+    if (filteredCards.length === 0) {
+      return { found: false, message: 'No matching cards after filtering' };
     }
-    
-    const bestMatch = products[0];
-    
-    // Get detailed pricing
-    const detailsUrl = `https://www.sportscardspro.com/api/product?t=${SPORTSCARDSPRO_TOKEN}&id=${bestMatch.id}`;
-    const detailsResponse = await axios.get(detailsUrl);
-    const details = detailsResponse.data;
-    
-    if (details.status !== 'success') {
-      return {
-        found: false,
-        message: 'Could not retrieve pricing details'
-      };
+
+    const topCard = filteredCards[0];
+    const rawPrice = topCard.raw_price;
+
+    if (!rawPrice || rawPrice === 0) {
+      return { found: false, message: 'Card found but no price available' };
     }
-    
-    const rawPrice = details['loose-price'] ? parseFloat(details['loose-price']) / 100 : null;
-    const salesVolume = details['sales-volume'] || 'Unknown';
-    
+
     return {
       found: true,
-      cardName: bestMatch['product-name'],
-      setName: bestMatch['console-name'],
       price: rawPrice,
-      salesVolume: salesVolume,
-      cardId: bestMatch.id
+      salesVolume: topCard.sales_volume || 0,
+      cardName: topCard.product_name,
+      setName: topCard.set_name
     };
-    
+
   } catch (error) {
-    console.error('SportsCardsPro search error:', error.message);
-    return {
-      found: false,
-      message: 'Error searching SportsCardsPro'
-    };
+    console.error('SportsCardsPro API error:', error.message);
+    return { found: false, error: error.message };
   }
 }
 
-function filterVariants(products, cardInfo) {
-  const queryLower = (cardInfo.parallel || '').toLowerCase();
-  const conditionalVariants = [
-    "canvas", "exclusive", "acetate", "deluxe", 
-    "outburst", "clear cut", "high gloss", "rainbow",
-    "spectrum", "silver", "gold", "platinum",
-    "parallel", "refractor", "prizm", "foil",
-    "chrome", "sparkle", "shimmer", "now"
-  ];
+// Filter and sort cards
+function filterAndSortCards(cards, targetCard) {
+  const { sport, parallel, cardNumber } = targetCard;
   
-  const wantsSpecificVariant = queryLower && queryLower !== 'base' && queryLower !== '';
-  const wantsConditionalVariant = conditionalVariants.some(term => queryLower.includes(term));
+  // Filter variants to exclude
+  const excludeVariants = ['prizm', 'chrome', 'optic', 'select', 'mosaic', 'refractor', 'shimmer', 'holo', 'silver', 'gold', 'auto', 'autograph', 'patch', 'relic', 'jersey', 'rookie ticket', 'numbered', 'insert', 'parallel', 'now'];
   
-  return products.filter(product => {
-    const productName = product['product-name'].toLowerCase();
-    const consoleName = product['console-name'].toLowerCase();
-    const fullText = productName + ' ' + consoleName;
-    
-    if (fullText.includes('oversized')) return false;
-    
-    if (wantsSpecificVariant) {
-      if (!fullText.includes(queryLower)) return false;
+  let filtered = cards.filter(card => {
+    // Sport filter
+    if (sport === 'hockey' && !card.set_name?.toLowerCase().includes('hockey')) {
+      return false;
+    }
+    if (sport === 'basketball' && !card.set_name?.toLowerCase().includes('basketball')) {
+      return false;
     }
     
-    if (!wantsConditionalVariant) {
-      for (const term of conditionalVariants) {
-        if (fullText.includes(term)) return false;
+    const productLower = card.product_name?.toLowerCase() || '';
+    const setLower = card.set_name?.toLowerCase() || '';
+    const combinedText = productLower + ' ' + setLower;
+    
+    // If user specified a parallel, REQUIRE exact match
+    if (parallel && parallel.toLowerCase() !== 'base') {
+      const parallelLower = parallel.toLowerCase();
+      if (!combinedText.includes(parallelLower)) {
+        return false;
+      }
+    }
+    
+    // If looking for base card, exclude special variants
+    if (!parallel || parallel.toLowerCase() === 'base') {
+      for (const variant of excludeVariants) {
+        if (combinedText.includes(variant)) {
+          return false;
+        }
+      }
+    }
+    
+    // Card number match (if specified and not "Not visible")
+    if (cardNumber && cardNumber !== 'Not visible') {
+      if (!productLower.includes(`#${cardNumber.toLowerCase()}`)) {
+        return false;
       }
     }
     
     return true;
   });
+
+  // Smart sorting for base cards
+  if (!parallel || parallel.toLowerCase() === 'base') {
+    filtered = smartSort(filtered, sport);
+  }
+
+  return filtered;
 }
 
-function smartSort(products, cardInfo) {
-  return products.sort((a, b) => {
-    const aName = a['console-name'].toLowerCase();
-    const bName = b['console-name'].toLowerCase();
-    const sport = cardInfo.sport.toLowerCase();
+// Smart sort to prioritize base sets
+function smartSort(cards, sport) {
+  const deprioritize = ['now', 'chrome', 'select', 'prizm', 'optic', 'mosaic', 'update', 'opening day'];
+  
+  return cards.sort((a, b) => {
+    const aText = (a.product_name + ' ' + a.set_name).toLowerCase();
+    const bText = (b.product_name + ' ' + b.set_name).toLowerCase();
     
+    // For basketball/baseball base cards, prioritize simple "Brand" sets
     if (sport === 'basketball' || sport === 'baseball') {
-      const aIsBase = !['now', 'chrome', 'select', 'prizm', 'optic', 'mosaic', 'contenders']
-        .some(keyword => aName.includes(keyword));
-      const bIsBase = !['now', 'chrome', 'select', 'prizm', 'optic', 'mosaic', 'contenders']
-        .some(keyword => bName.includes(keyword));
+      const aHasDeprioritized = deprioritize.some(term => aText.includes(term));
+      const bHasDeprioritized = deprioritize.some(term => bText.includes(term));
       
-      if (aIsBase && !bIsBase) return -1;
-      if (!aIsBase && bIsBase) return 1;
+      if (aHasDeprioritized && !bHasDeprioritized) return 1;
+      if (!aHasDeprioritized && bHasDeprioritized) return -1;
     }
     
+    // For hockey, prioritize Young Guns
     if (sport === 'hockey') {
-      const aIsFlagship = aName.match(/^hockey cards \d{4}(-\d{2})? upper deck$/);
-      const bIsFlagship = bName.match(/^hockey cards \d{4}(-\d{2})? upper deck$/);
+      const aIsYoungGuns = aText.includes('young guns');
+      const bIsYoungGuns = bText.includes('young guns');
       
-      if (aIsFlagship && !bIsFlagship) return -1;
-      if (!aIsFlagship && bIsFlagship) return 1;
+      if (aIsYoungGuns && !bIsYoungGuns) return -1;
+      if (!aIsYoungGuns && bIsYoungGuns) return 1;
     }
     
-    return aName.split(' ').length - bName.split(' ').length;
+    return 0;
   });
 }
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
+// Start server
+app.listen(port, () => {
+  console.log(`🚀 Server running on http://localhost:${port}`);
   console.log('💻 eBay scraper enabled with SportsCardsPro fallback');
 });
