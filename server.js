@@ -92,8 +92,12 @@ If the card number is not visible, use "Not visible". If there's no parallel/var
       ],
     });
 
-    const cardInfo = JSON.parse(message.content[0].text);
-    console.log('✅ Card identified:', cardInfo);
+// Strip markdown code blocks if present
+let cleanContent = message.content[0].text.trim();
+if (cleanContent.startsWith('```')) {
+  cleanContent = cleanContent.replace(/^```json\n?/g, '').replace(/\n?```$/g, '');
+}
+const cardInfo = JSON.parse(cleanContent);    console.log('✅ Card identified:', cardInfo);
     
     res.json({ success: true, cardInfo });
   } catch (error) {
