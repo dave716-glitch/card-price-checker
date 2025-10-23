@@ -56,7 +56,7 @@
       <p id="loadingText" class="text-gray-700">Analyzing card...</p>
     </div>
 
-    <!-- Card Edit Form (NEW!) -->
+    <!-- Card Edit Form -->
     <div id="editSection" class="hidden bg-white rounded-lg shadow-lg p-6 mb-6">
       <h3 class="text-xl font-bold text-gray-800 mb-4">Card Details - Review & Edit</h3>
       <div class="space-y-4">
@@ -195,44 +195,37 @@
         }
       } catch (err) {
         console.error('Failed to fetch exchange rate:', err);
-        exchangeRateDiv.textContent = 'Exchange rate: 1 USD ≈ 1.40 CAD (estimated)';
+        exchangeRateDiv.textContent = `Exchange rate: 1 USD ≈ ${exchangeRate.toFixed(4)} CAD (estimated)`;
       }
     }
 
-    // Initialize
     fetchExchangeRate();
 
     // Currency toggle
     usdBtn.addEventListener('click', () => {
       currentCurrency = 'USD';
-      usdBtn.classList.add('bg-blue-600', 'text-white');
       usdBtn.classList.remove('bg-gray-200', 'text-gray-700');
-      cadBtn.classList.add('bg-gray-200', 'text-gray-700');
+      usdBtn.classList.add('bg-blue-600', 'text-white');
       cadBtn.classList.remove('bg-blue-600', 'text-white');
-      if (currentPricing) {
-        updatePriceDisplay();
-      }
+      cadBtn.classList.add('bg-gray-200', 'text-gray-700');
+      if (currentPricing) updatePriceDisplay();
     });
 
     cadBtn.addEventListener('click', () => {
       currentCurrency = 'CAD';
-      cadBtn.classList.add('bg-blue-600', 'text-white');
       cadBtn.classList.remove('bg-gray-200', 'text-gray-700');
-      usdBtn.classList.add('bg-gray-200', 'text-gray-700');
+      cadBtn.classList.add('bg-blue-600', 'text-white');
       usdBtn.classList.remove('bg-blue-600', 'text-white');
-      if (currentPricing) {
-        updatePriceDisplay();
-      }
+      usdBtn.classList.add('bg-gray-200', 'text-gray-700');
+      if (currentPricing) updatePriceDisplay();
     });
 
-    // File input change
-    fileInput.addEventListener('change', async (e) => {
+    // File selection
+    fileInput.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
 
       selectedFile = file;
-      
-      // Show preview
       const reader = new FileReader();
       reader.onload = (e) => {
         previewImage.src = e.target.result;
@@ -245,34 +238,28 @@
       reader.readAsDataURL(file);
     });
 
-    // Scan button - ONLY identifies card
+    // Scan button - identify card only
     scanBtn.addEventListener('click', async () => {
       if (!selectedFile) return;
 
-      // Show loading
-      previewSection.classList.add('hidden');
       loading.classList.remove('hidden');
       loadingText.textContent = 'Analyzing card...';
-      error.classList.add('hidden');
+      previewSection.classList.add('hidden');
       editSection.classList.add('hidden');
+      error.classList.add('hidden');
       results.classList.add('hidden');
 
       try {
-        // Convert image to base64
-        const base64Image = await fileToBase64(selectedFile);
-        
-        // Remove data URL prefix to get just the base64 string
-        const base64Data = base64Image.split(',')[1];
-
         console.log('Sending image to server...');
+
+        // Create FormData to send image file
+        const formData = new FormData();
+        formData.append('image', selectedFile);
 
         // ONLY identify card
         const identifyResponse = await fetch(`${API_URL}/api/identify-card`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ image: base64Data })
+          body: formData
         });
 
         if (!identifyResponse.ok) {
@@ -360,16 +347,6 @@
         editSection.classList.remove('hidden');
       }
     });
-
-    // Convert file to base64
-    function fileToBase64(file) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-    }
 
     // Display results
     function displayResults() {
