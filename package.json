@@ -1,25 +1,19 @@
 {
   "name": "card-price-checker",
   "version": "1.0.0",
-  "description": "Sports card price scanner with eBay scraper",
+  "description": "Sports card price checker using Claude Vision and eBay",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
+    "start": "node server.js"
   },
-  "keywords": ["sports cards", "price checker", "ebay scraper"],
-  "author": "",
-  "license": "ISC",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
+    "@sparticuz/chromium": "^123.0.1",
     "axios": "^1.7.9",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
-    "puppeteer": "^23.10.4"
-  },
-  "devDependencies": {
-    "nodemon": "^3.1.9"
+    "puppeteer-core": "^22.6.0"
   },
   "engines": {
     "node": ">=18.0.0"
